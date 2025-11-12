@@ -3,10 +3,8 @@ import { SiteHeader } from "@/components/site-header"
 import {
   SidebarInset,
   SidebarProvider,
-  SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-import Link from "next/link";
 import {  
   DollarSign,
   LineChart,
