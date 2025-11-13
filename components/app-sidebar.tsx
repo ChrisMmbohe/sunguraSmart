@@ -133,7 +133,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenuItem>
                             <div className="flex w-full">
                                 <SignInButton mode="modal">
-                                    <Button>
+                                    <Button className="w-full" >
                                         <LogIn className="h-4 w-4" />
                                         <span>Sign In / Sign Up</span>
                                     </Button>

@@ -32,7 +32,7 @@ export default function Page() {
         <SiteHeader />
         <div className="flex flex-1 flex-col gap-8 p-4 pt-0">
           {/* Hero Section */}
-          <section className="flex flex-col items-center justify-center text-center py-12 px-4">
+          <section className="flex flex-col items-center justify-center text-center py-12 px-4 rounded-xl bg-muted/50 shadow-2xl dark:shadow-muted transition-shadow duration-300">
             <h1 className="text-4xl md:text-6xl font-bold mb-6">
               Streamline Your Rabbit Farm Management
             </h1>
@@ -59,7 +59,7 @@ export default function Page() {
               Comprehensive Farm Management
             </h2>
             <div className="grid md:grid-cols-3 gap-8">
-              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50">
+              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300">
                 <Database className="h-12 w-12 mb-4 text-primary" />
                 <h3 className="text-xl font-semibold mb-2">
                   Breeding Management
@@ -69,7 +69,7 @@ export default function Page() {
                   our advanced database
                 </p>
               </div>
-              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50">
+              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300">
                 <BarChart2 className="h-12 w-12 mb-4 text-primary" />
                 <h3 className="text-xl font-semibold mb-2">
                   Production Analytics
@@ -79,7 +79,7 @@ export default function Page() {
                   metrics
                 </p>
               </div>
-              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50">
+              <div className="flex flex-col items-center text-center p-6 rounded-xl bg-muted/50 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300">
                 <ClipboardCheck className="h-12 w-12 mb-4 text-primary" />
                 <h3 className="text-xl font-semibold mb-2">Health Tracking</h3>
                 <p className="text-muted-foreground">
@@ -113,7 +113,7 @@ export default function Page() {
               ].map((stat, i) => (
                 <div
                   key={i}
-                  className="flex flex-col items-center p-6 rounded-xl bg-muted/50"
+                  className="flex flex-col items-center p-6 rounded-xl bg-muted/50 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300"
                 >
                   <div className="text-primary mb-2">{stat.icon}</div>
                   <h3 className="text-2xl font-bold mb-1">{stat.metric}</h3>
@@ -125,7 +125,7 @@ export default function Page() {
 
           {/* Call to Action */}
           <section className="py-12">
-            <div className="bg-muted/50 rounded-xl p-8 text-center">
+            <div className="bg-muted/50 rounded-xl p-8 text-center shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300">
               <Zap className="h-12 w-12 mx-auto mb-4 text-primary" />
               <h2 className="text-3xl font-bold mb-4">
                 Ready to Optimize Your Rabbit Farm?
