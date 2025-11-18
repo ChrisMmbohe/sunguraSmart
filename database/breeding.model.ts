@@ -16,17 +16,16 @@ export interface IBreeding extends Document {
   days_to_due: number;
 }
 
-interface BreedingSuccessRate {
+export interface BreedingSuccessRate {
   total_breedings: number;
   successful: number;
   failed: number;
   success_rate: number;
 }
 
-interface IBreedingModel extends Model<IBreeding> {
+export interface IBreedingModel extends Model<IBreeding> {
   getBreedingSuccess(userId: string): Promise<BreedingSuccessRate>;
 }
-
 const breedingSchema = new Schema<IBreeding, IBreedingModel>(
   {
     buck_id: {

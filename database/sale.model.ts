@@ -31,9 +31,8 @@ const saleSchema = new Schema<ISale, ISaleModel>(
     sale_price: {
       type: Number,
       required: true,
-      min: 0,
-    },
-    buyer_name: {
+      min: 0.01,
+    },    buyer_name: {
       type: String,
       default: null,
     },
@@ -62,8 +61,7 @@ saleSchema.pre('save', async function (next) {
       throw new Error('Sale price must be greater than 0');
     }
 
-    this.sale_date = new Date(this.sale_date.setUTCHours(0, 0, 0, 0));
-
+    this.sale_date.setUTCHours(0, 0, 0, 0);
     const Rabbit = mongoose.model('Rabbit');
     const rabbit = await Rabbit.findById(this.rabbit_id);
 

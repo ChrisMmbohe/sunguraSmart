@@ -49,18 +49,9 @@ const feedTypeSchema = new Schema<IFeedType, IFeedTypeModel>(
 
 // Virtual: Calculate weekly need per rabbit based on daily recommendation
 feedTypeSchema.virtual('weekly_need_per_rabbit').get(function () {
-  // Parse frequency to calculate weekly need
-  if (this.frequency && this.frequency.toLowerCase().includes('week')) {
-    const match = this.frequency.match(/(\d+)/);
-    if (match) {
-      const weeksInterval = parseInt(match[0], 10);
-      return this.daily_recommendation_per_rabbit / (7 * weeksInterval);
-    }
-  }
-  // Default: daily * 7
+  // Weekly need is always daily recommendation * 7 days
   return this.daily_recommendation_per_rabbit * 7;
 });
-
 // Indexes
 feedTypeSchema.index({ name: 1 });
 

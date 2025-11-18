@@ -24,10 +24,10 @@ const breedSchema = new Schema<IBreed, IBreedModel>(
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
-    },
-    description: {
+      lowercase: true,
+      unique: true,
+    },    description: {
       type: String,
       default: null,
     },

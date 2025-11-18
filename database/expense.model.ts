@@ -41,7 +41,7 @@ const expenseSchema = new Schema<IExpense, IExpenseModel>(
     amount: {
       type: Number,
       required: true,
-      min: 0,
+      min: 0.01,
     },
     description: {
       type: String,

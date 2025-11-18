@@ -13,8 +13,7 @@ export interface ISchedule extends Document {
   updatedAt: Date;
 }
 
-interface IScheduleModel extends Model<ISchedule> {}
-
+export interface IScheduleModel extends Model<ISchedule> {}
 const scheduleSchema = new Schema<ISchedule, IScheduleModel>(
   {
     user_id: {

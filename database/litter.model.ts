@@ -86,9 +86,8 @@ litterSchema.pre('save', async function (next) {
       if (!breeding) throw new Error('Breeding record not found');
 
       // Update breeding status
-      breeding.status = 'Mated';
+      breeding.status = 'Kindled';
       await breeding.save();
-
       // Update doe pregnancy status
       const Rabbit = mongoose.model('Rabbit');
       const doe = await Rabbit.findById(breeding.doe_id);
@@ -98,7 +97,7 @@ litterSchema.pre('save', async function (next) {
       }
 
       // Auto-create kit rabbit documents
-      if (this.num_kits_born && this.num_kits_born > 0 && this.litter_tag_prefix) {
+      if (this.isNew && this.num_kits_born && this.num_kits_born > 0 && this.litter_tag_prefix) {
         const kits = [];
         for (let i = 1; i <= this.num_kits_born; i++) {
           kits.push({
@@ -114,8 +113,7 @@ litterSchema.pre('save', async function (next) {
           });
         }
         await Rabbit.insertMany(kits);
-      }
-    }
+      }    }
 
     next();
   } catch (error) {
