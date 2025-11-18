@@ -1,0 +1,439 @@
+You are a backend developer working on a Next.js application with Mongoose and TypeScript. Your task is to build a database layer with several Mongoose models, namely: `Breed`, `Cage`, `Rabbit`, `Breeding`, `Litter`, `Weight`, `HealthRecord`, `Cull`, `Death`, `Sale`,  `Expense`,  `Schedule`, `Disease`, `FeedType`, `FeedLog`,   in a new `database` folder.
+
+The system must support **end-to-end farm operations** with **data integrity** and **performance**:  
+- Efficient **aggregations** for dashboards (e.g., population counts via `$group`).  
+- **Automation** (e.g., age calculation, due dates, alerts).  
+- **Query optimization** (indexes on filters like `user_id`, `status`, dates).  
+- **Business rules** enforced in middleware (e.g., gender checks, maturity).  
+
+Project Goals (User Must Be Able To):
+
+| Goal | Requirement | Supported By |
+|------|-------------|--------------|
+| **Know total population** | Counts by gender, status (born/dead/sick), breed, pregnant, mature | Rabbit model (aggregations via statics) |
+| **Capture new rabbits** | Internal (litters) or external (farms); full details (lineage, source) | Rabbit model (acquisition_type, source_farm) |
+| **Manage breeding** | Breeds/characteristics, pairing, breeding/due (+30 days)/kindle dates, kits born/weaned | Breeding + Litter models |
+| **Manage feeds** | Track types (pellets, hay); consumption (100g pellets/day, 1 hay bale/2 weeks per rabbit); inventory | FeedType + FeedLog models |
+| **Manage finances** | Income (sales) vs. expenses (feed, vet, upkeep) | Sale + Expense models |
+| **Manage health** | Disease DB, per-rabbit records (illness, treatment); alerts (repeats, vaccines, deworming) | Disease + HealthRecord + Schedule models |
+
+📁 You must create exactly sixteen (16) files:
+
+ `breed.model.ts`
+ `cage.model.ts`
+ `rabbit.model.ts`
+`breeding.model.ts`
+`litter.model.ts`
+`weight.model.ts`
+`healthRecord.model.ts`
+`cull.model.ts`
+`death.model.ts`
+`sale.model.ts`
+`expense.model.ts`
+`schedule.model.ts`
+`disease.model.ts`
+`feedType.model.ts`
+`feedLog.model.ts`
+index.ts
+
+
+1. `database/breed.model.ts`
+
+Create a strongly typed Mongoose schema and model called Breed with the following fields:
+
+- name: string (required, unique)
+- description: string | null
+- average_weight_kg: number | null
+- breed_colors: string[] (default: [])
+- recommended_feed: string | null (e.g., "High-protein pellets")
+- maturity_age_days: number (default: 112) // ~16 weeks
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Normalize `name` to lowercase for uniqueness.  
+- **Virtuals**: `is_meat_breed` — true if average_weight_kg > 4 (example).  
+- **Statics**: `getByCharacteristics(query: { weight?: number })` — filter breeds.  
+- **Indexes**: `{ name: 1 }` (unique).  
+- Enable **timestamps**.  
+- Comments: On normalization for search efficiency.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+2. `database/cage.model.ts`
+
+Create a strongly typed Mongoose schema and model called Cage with the following fields:
+
+- cage_id: string (required, unique)
+- capacity: number (default: 1)
+- location: string | null (e.g., "Barn A")
+- notes: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Validate capacity > 0.  
+- **Virtuals**: `occupancy` — count rabbits via aggregation (placeholder for population).  
+- **Indexes**: `{ cage_id: 1 }` (unique).  
+- Enable **timestamps**.  
+- Comments: On virtual for real-time occupancy checks.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+3.  `database/rabbit.model.ts`
+
+Create a strongly typed Mongoose schema and model called Rabbit with the following fields:
+
+- tag_id: string (required, unique)
+- name: string | null
+- breed_id: ObjectId | null (ref: 'Breed')
+- gender: 'Male' | 'Female' (required)
+- date_of_birth: Date | null
+- acquisition_date: Date | null
+- acquisition_type: 'born' | 'purchased' | 'gift' | 'other' | null
+- source_farm: string | null
+- cage_id: ObjectId | null (ref: 'Cage')
+- photo: string | null
+- color: string | null
+- category: string | null (e.g., 'Breeder')
+- notes: string | null
+- sire_id: ObjectId | null (ref: 'Rabbit')
+- dam_id: ObjectId | null (ref: 'Rabbit')
+- user_id: string | null
+- status: 'Active' | 'Sold' | 'Deceased' | 'Culled' (required, default: 'Active')
+- is_pregnant: boolean (default: false) // Females only
+- last_breeding_date: Date | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**:  
+  - Calculate `age_in_days = Math.floor((Date.now() - date_of_birth) / 86400000)` if date_of_birth set.  
+  - Set maturity_status virtual.  
+  - If acquisition_type === 'born', require sire_id/dam_id; validate refs exist.  
+  - Normalize dates to UTC midnight.  
+  - Enforce: sire_id ≠ _id, gender-specific rules (e.g., is_pregnant only for Female).  
+- **Virtuals**:  
+  - `age_in_days`: number  
+  - `maturity_status`: 'Kit' (0-56 days) | 'Junior' (57-112) | 'Adult' (113-365) | 'Senior' (>365)  
+  - `is_mature`: boolean (age_in_days >= 112)  
+  - `full_name`: name || tag_id  
+  - `daily_feed_needed`: { pellets: 100, hay: 1/14 } // g/day, bale/day (per 2 weeks)  
+- **Statics**:  
+  - `getPopulationStats(userId: string)`: Aggregate counts (total, male/female, active/dead/sick by health refs, pregnant, mature by breed).  
+- **Indexes**:  
+  - `{ tag_id: 1 }` (unique)  
+  - `{ user_id: 1, status: 1, gender: 1 }`  
+  - `{ breed_id: 1 }`  
+  - `{ is_pregnant: 1 }` (sparse)  
+  - `{ date_of_birth: -1 }`  
+- Enable **timestamps**.  
+- Comments: On population static for dashboard efficiency; virtual feeds for management.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+4. `database/breeding.model.ts`
+
+Create a strongly typed Mongoose schema and model called Breeding with the following fields:
+
+- buck_id: ObjectId (ref: 'Rabbit', required)
+- doe_id: ObjectId (ref: 'Rabbit', required)
+- breeding_date: Date (required)
+- expected_due_date: Date | null
+- notes: string | null
+- user_id: string | null
+- status: 'Planned' | 'Mated' | 'Failed' (default: 'Planned')
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**:  
+  - Set expected_due_date = breeding_date + 30 days.  
+  - Validate: buck Male/Active/Mature, doe Female/Active/Mature/not pregnant; buck ≠ doe.  
+  - Update doe: is_pregnant = true, last_breeding_date.  
+  - breeding_date <= today.  
+- **Virtuals**: `days_to_due`: Math.floor((expected_due_date - Date.now()) / 86400000)  
+- **Statics**: `getBreedingSuccess(userId: string)`: Aggregate success rates via litters.  
+- **Indexes**: `{ buck_id: 1 }`, `{ doe_id: 1 }`, `{ user_id: 1, breeding_date: -1 }`  
+- Enable **timestamps**.  
+- Comments: On sync with Rabbit pregnancy; validation for business rules.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+5. `database/litter.model.ts`
+
+Create a strongly typed Mongoose schema and model called Litter with the following fields:
+
+- breeding_id: ObjectId (ref: 'Breeding', required)
+- kindling_date: Date (required)
+- num_kits_born: number | null
+- num_kits_alive: number | null
+- num_kits_weaned: number | null
+- wean_date: Date | null
+- litter_tag_prefix: string | null
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**:  
+  - If kindling_date set, update breeding status = 'Kindled'; doe is_pregnant = false.  
+  - Auto-create Rabbit docs for kits (tag_id with prefix, born acquisition, sire/dam from breeding).  
+  - If num_kits_weaned set, calculate wean_date ~28 days post-kindling.  
+- **Virtuals**: `success_rate`: (num_kits_weaned / num_kits_born) * 100  
+- **Indexes**: `{ breeding_id: 1 }`, `{ user_id: 1, kindling_date: -1 }`  
+- Enable **timestamps**.  
+- Comments: On auto-kit creation for new rabbits; integration with breeding.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+6. `database/weight.model.ts`
+
+Create a strongly typed Mongoose schema and model called Weight with the following fields:
+
+- rabbit_id: ObjectId (ref: 'Rabbit', required)
+- measurement_date: Date (required)
+- weight_kg: number (required)
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Validate weight > 0; ref rabbit exists.  
+- **Virtuals**: `growth_rate`: Compare to previous weight (via query).  
+- **Statics**: `getAverageGrowth(breedId: string)`: Aggregate by breed.  
+- **Indexes**: `{ rabbit_id: 1, measurement_date: -1 }`  
+- Enable **timestamps**.  
+- Comments: On use for feed efficiency analysis.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+7. `database/health-record.model.ts`
+
+Create a strongly typed Mongoose schema and model called HealthRecord with the following fields:
+
+- rabbit_id: ObjectId (ref: 'Rabbit', required)
+- record_date: Date (required)
+- disease_id: ObjectId | null (ref: 'Disease')
+- issue: string (required)
+- treatment: string | null
+- medication: string | null
+- veterinarian: string | null
+- notes: string | null
+- user_id: string | null
+- is_repeat: boolean (default: false) // Auto-set if similar prior
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Check for similar prior records on rabbit; set is_repeat; validate rabbit Active.  
+- **Statics**: `getSickCount(userId: string)`: Aggregate for population.  
+- **Indexes**: `{ rabbit_id: 1, record_date: -1 }`  
+- Enable **timestamps**.  
+- Comments: On repeat detection for alerts.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+8. `database/cull.model.ts`
+
+Create a strongly typed Mongoose schema and model called Cull with the following fields:
+
+- rabbit_id: ObjectId (ref: 'Rabbit', required)
+- cull_date: Date (required)
+- reason: string | null
+- destination: string | null
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Update rabbit status = 'Culled'.  
+- **Indexes**: `{ rabbit_id: 1 }` (unique)  
+- Enable **timestamps**.  
+- Comments: On status sync.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+9. `database/death.model.ts`
+
+Create a strongly typed Mongoose schema and model called Death with the following fields:
+
+- rabbit_id: ObjectId (ref: 'Rabbit', required)
+- death_date: Date (required)
+- cause: string | null
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Update rabbit status = 'Deceased'.  
+- **Indexes**: `{ rabbit_id: 1 }` (unique)  
+- Enable **timestamps**.  
+- Comments: On status sync for population.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+10. `database/sale.model.ts`
+
+Create a strongly typed Mongoose schema and model called Sale with the following fields:
+
+- rabbit_id: ObjectId (ref: 'Rabbit', required)
+- sale_date: Date (required)
+- sale_price: number (required)
+- buyer_name: string | null
+- buyer_contact: string | null
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Update rabbit status = 'Sold'; validate price > 0.  
+- **Statics**: `getTotalIncome(userId: string, period: { start: Date, end: Date })`: Sum sales.  
+- **Indexes**: `{ rabbit_id: 1 }` (unique), `{ user_id: 1, sale_date: -1 }`  
+- Enable **timestamps**.  
+- Comments: On finance aggregation.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+11. `database/expense.model.ts`
+
+Create a strongly typed Mongoose schema and model called Expense with the following fields:
+
+- user_id: string | null
+- expense_date: Date (required)
+- category: string (required, e.g., 'Feed', 'Vet')
+- amount: number (required)
+- description: string | null
+- notes: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Validate amount > 0.  
+- **Statics**: `getTotalExpenses(userId: string, period: { start: Date, end: Date })`: Sum by category.  
+- **Indexes**: `{ user_id: 1, expense_date: -1 }`, `{ category: 1 }`  
+- Enable **timestamps**.  
+- Comments: On use with sales for profit calc.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+12. `database/schedule.model.ts`
+
+Create a strongly typed Mongoose schema and model called Schedule with the following fields:
+
+- user_id: string | null
+- task_date: Date (required)
+- task_type: string (required, e.g., 'Vaccine', 'Deworm', 'Health Check')
+- rabbit_id: ObjectId | null (ref: 'Rabbit')
+- litter_id: ObjectId | null (ref: 'Litter')
+- notes: string | null
+- is_completed: boolean (default: false)
+- is_alert: boolean (default: false) // For repeats
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: If task_type health-related, check HealthRecord repeats; set is_alert.  
+- **Indexes**: `{ user_id: 1, task_date: 1 }`, `{ rabbit_id: 1 }`  
+- TTL index on task_date (expire after completion).  
+- Enable **timestamps**.  
+- Comments: On alerts for health management.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+13. `database/disease.model.ts`
+
+Create a strongly typed Mongoose schema and model called Disease with the following fields:
+
+- name: string (required, unique)
+- symptoms: string[] (default: [])
+- treatments: string[] (default: [])
+- prevention: string | null (e.g., 'Vaccinate annually')
+- severity: 'Low' | 'Medium' | 'High' (default: 'Medium')
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Indexes**: `{ name: 1 }` (unique)  
+- Enable **timestamps**.  
+- Comments: Reference in HealthRecord for standardization.
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+14. `database/feed-type.model.ts`
+
+Create a strongly typed Mongoose schema and model called FeedType with the following fields:
+
+- name: string (required, unique, e.g., 'Pellets', 'Hay')
+- unit: string (required, e.g., 'g', 'bale')
+- daily_recommendation_per_rabbit: number (default: 100) // g for pellets
+- frequency: string | null (e.g., 'daily', 'every 2 weeks')
+- cost_per_unit: number | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Virtuals**: `weekly_need_per_rabbit`: daily * 7 or based on frequency.  
+- **Indexes**: `{ name: 1 }` (unique)  
+- Enable **timestamps**.  
+- Comments: For feed management calcs.- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+15. `database/feed-log.model.ts`
+
+Create a strongly typed Mongoose schema and model called FeedLog with the following fields:
+
+- feed_type_id: ObjectId (ref: 'FeedType', required)
+- date: Date (required)
+- quantity_used: number (required)
+- rabbits_covered: number | null // Or array of rabbit_ids
+- notes: string | null
+- user_id: string | null
+- createdAt: Date
+- updatedAt: Date
+
+Requirements:
+
+- **Middleware (pre-save)**: Validate quantity > 0; suggest based on population.  
+- **Statics**: `getMonthlyConsumption(userId: string)`: Aggregate usage vs. recommendations.  
+- **Indexes**: `{ user_id: 1, date: -1 }`, `{ feed_type_id: 1 }`  
+- Enable **timestamps**.  
+- Comments: On integration with finances (auto-expense?).
+- Use strict TypeScript types (no `any`).
+- Write concise comments explaining key logic.
+
+16. `database/index.ts`
+
+- Export **all models** alphabetically.  
+- Enable single import: `import { Rabbit, Breeding, ... } from '@/database';`
+
+
+✅ Final Deliverable:
+
+- **Files**: One per model + `index.ts`.  
+- **Production-Grade**: Type-safe, indexed, middleware-enforced rules, virtuals for computations, statics for goals.  
+- **No `any`**, **no logs**, **concise comments**.  
+- **Focus**: Efficiency via indexes/aggregations; full goal coverage with automations.
+
+**Build a robust, efficient backbone for the Rabbit Farm
+
+
