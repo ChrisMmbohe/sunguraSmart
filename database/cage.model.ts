@@ -48,12 +48,6 @@ cageSchema.pre('save', function (next) {
   next();
 });
 
-// Virtual: Occupancy placeholder - will be populated via aggregation with Rabbit model
-// Real-time checks can query Rabbit.countDocuments({ cage_id: this._id, status: 'Active' })
-cageSchema.virtual('occupancy').get(function () {
-  // Placeholder - implement via aggregation pipeline in routes/controllers
-  return 0;
-});
 
 // Indexes
 cageSchema.index({ cage_id: 1 });

@@ -12,17 +12,16 @@ export interface IWeight extends Document {
   growth_rate: number | null;
 }
 
-interface AverageGrowth {
+export interface AverageGrowth {
   breed_id: string;
   breed_name: string;
   average_weight: number;
   average_growth_rate: number;
 }
 
-interface IWeightModel extends Model<IWeight> {
+export interface IWeightModel extends Model<IWeight> {
   getAverageGrowth(breedId: string): Promise<AverageGrowth>;
 }
-
 const weightSchema = new Schema<IWeight, IWeightModel>(
   {
     rabbit_id: {

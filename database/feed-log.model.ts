@@ -11,17 +11,16 @@ export interface IFeedLog extends Document {
   updatedAt: Date;
 }
 
-interface MonthlyConsumption {
+export interface MonthlyConsumption {
   feed_type: string;
   total_used: number;
   recommended: number;
   variance: number;
 }
 
-interface IFeedLogModel extends Model<IFeedLog> {
+export interface IFeedLogModel extends Model<IFeedLog> {
   getMonthlyConsumption(userId: string): Promise<MonthlyConsumption[]>;
 }
-
 const feedLogSchema = new Schema<IFeedLog, IFeedLogModel>(
   {
     feed_type_id: {

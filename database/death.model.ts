@@ -45,8 +45,7 @@ const deathSchema = new Schema<IDeath, IDeathModel>(
 // Pre-save: Update rabbit status to 'Deceased' for population tracking
 deathSchema.pre('save', async function (next) {
   try {
-    this.death_date = new Date(this.death_date.setUTCHours(0, 0, 0, 0));
-
+    this.death_date.setUTCHours(0, 0, 0, 0);
     const Rabbit = mongoose.model('Rabbit');
     const rabbit = await Rabbit.findById(this.rabbit_id);
 
