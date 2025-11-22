@@ -35,7 +35,7 @@ export interface IRabbit extends Document {
   daily_feed_needed: { pellets: number; hay: number };
 }
 
-export interface PopulationStats {
+interface PopulationStats {
   total: number;
   male: number;
   female: number;
@@ -48,9 +48,11 @@ export interface PopulationStats {
   mature: number;
   by_breed: Array<{ breed: string; count: number }>;
 }
-export interface IRabbitModel extends Model<IRabbit> {
+
+interface IRabbitModel extends Model<IRabbit> {
   getPopulationStats(userId: string): Promise<PopulationStats>;
 }
+
 const rabbitSchema = new Schema<IRabbit, IRabbitModel>(
   {
     tag_id: {
@@ -284,7 +286,8 @@ rabbitSchema.statics.getPopulationStats = async function (userId: string): Promi
 // Indexes for query optimization
 rabbitSchema.index({ tag_id: 1 });
 rabbitSchema.index({ user_id: 1, status: 1, gender: 1 });
-rabbitSchema.index({ user_id: 1, status: 1, gender: 1 });rabbitSchema.index({ is_pregnant: 1 }, { sparse: true });
+rabbitSchema.index({ breed_id: 1 });
+rabbitSchema.index({ is_pregnant: 1 }, { sparse: true });
 rabbitSchema.index({ date_of_birth: -1 });
 
 rabbitSchema.set('toJSON', { virtuals: true });

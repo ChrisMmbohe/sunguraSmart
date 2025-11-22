@@ -16,16 +16,20 @@ export interface IBreeding extends Document {
   days_to_due: number;
 }
 
-export interface BreedingSuccessRate {
-  total_breedings: number;
-  successful: number;
-  failed: number;
-  success_rate: number;
+// 💡 UPDATED INTERFACE for the Cumulative Calculation
+export interface CumulativeBreedingSuccessRate {
+  total_breedings_attempted: number;
+  kindled_litters: number;
+  weaned_litters: number;
+  kindling_rate_pct: number; // Breeding -> Kindling Success Rate
+  weaning_survival_rate_pct: number; // Breeding -> Weaning Cumulative Success Rate
 }
 
 export interface IBreedingModel extends Model<IBreeding> {
-  getBreedingSuccess(userId: string): Promise<BreedingSuccessRate>;
+  // Updated return type to the new cumulative interface
+  getBreedingSuccess(userId: string): Promise<CumulativeBreedingSuccessRate>; 
 }
+
 const breedingSchema = new Schema<IBreeding, IBreedingModel>(
   {
     buck_id: {
@@ -89,6 +93,7 @@ breedingSchema.pre('save', async function (next) {
         throw new Error('Buck and doe cannot be the same rabbit');
       }
 
+      // NOTE: This assumes the 'Rabbit' model is registered (e.g., in index.ts)
       const Rabbit = mongoose.model('Rabbit');
       const [buck, doe] = await Promise.all([
         Rabbit.findById(this.buck_id),
@@ -130,30 +135,69 @@ breedingSchema.virtual('days_to_due').get(function () {
   return Math.floor((this.expected_due_date.getTime() - Date.now()) / 86400000);
 });
 
-// Static: Calculate breeding success rate via litters
-breedingSchema.statics.getBreedingSuccess = async function (userId: string): Promise<BreedingSuccessRate> {
-  const filter = userId ? { user_id: userId } : {};
+// 🚀 MODIFIED STATIC METHOD FOR CUMULATIVE CALCULATION (Breeding to Weaning)
+breedingSchema.statics.getBreedingSuccess = async function (userId: string): Promise<CumulativeBreedingSuccessRate> {
+  // Only count 'Mated' status as an attempted breeding
+  // Note: 'Planned' and 'Failed' are excluded from the denominator.
+  const filter = userId ? { user_id: userId, status: 'Mated' } : { status: 'Mated' }; 
 
-  const result = await this.aggregate([
+  const results = await this.aggregate([
     { $match: filter },
     {
-      $facet: {
-        total: [{ $count: 'count' }],
-        by_status: [{ $group: { _id: '$status', count: { $sum: 1 } } }],
+      // Join Breeding records with Litter records using breeding_id
+      $lookup: {
+        from: 'litters', // This must match the name of your Litter collection (usually pluralized 'litters')
+        localField: '_id',
+        foreignField: 'breeding_id',
+        as: 'litter_data',
+      },
+    },
+    // Allows us to count breedings without a litter (failed kindling/not yet due)
+    { $unwind: { path: '$litter_data', preserveNullAndEmptyArrays: true } }, 
+    {
+      $group: {
+        _id: null,
+        total_breedings_attempted: { $sum: 1 }, 
+
+        // Kindled Litters: Check if a Litter record exists AND has a kindling date
+        kindled_litters: {
+          $sum: {
+            $cond: [{ $ne: ['$litter_data.kindling_date', null] }, 1, 0] 
+          },
+        },
+        // Weaned Litters: Check if the Litter record has num_kits_weaned > 0
+        weaned_litters: {
+          $sum: {
+            $cond: [{ $gt: ['$litter_data.num_kits_weaned', 0] }, 1, 0] 
+          },
+        },
       },
     },
   ]);
 
-  const total = result[0].total[0]?.count || 0;
-  const statusMap = new Map(result[0].by_status.map((s: { _id: string; count: number }) => [s._id, s.count]));
-  const successful = statusMap.get('Mated') || 0;
-  const failed = statusMap.get('Failed') || 0;
+  const data = results[0] || {};
+  const total = data.total_breedings_attempted || 0;
+  const kindled = data.kindled_litters || 0;
+  const weaned = data.weaned_litters || 0;
+
+  let kindling_rate_pct = 0;
+  let weaning_survival_rate_pct = 0;
+
+  if (total > 0) {
+      // Kindling Rate: Mated Breedings that resulted in a kindled litter
+      kindling_rate_pct = (kindled / total) * 100;
+
+      // Cumulative Weaning Rate: Mated Breedings that resulted in a litter with weaned kits
+      weaning_survival_rate_pct = (weaned / total) * 100;
+  }
 
   return {
-    total_breedings: total,
-    successful,
-    failed,
-    success_rate: total > 0 ? (successful / total) * 100 : 0,
+    total_breedings_attempted: total,
+    kindled_litters: kindled,
+    weaned_litters: weaned,
+    // Round to 2 decimal places
+    kindling_rate_pct: parseFloat(kindling_rate_pct.toFixed(2)),
+    weaning_survival_rate_pct: parseFloat(weaning_survival_rate_pct.toFixed(2)), 
   };
 };
 

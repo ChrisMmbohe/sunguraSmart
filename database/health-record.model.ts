@@ -83,8 +83,7 @@ healthRecordSchema.pre('save', async function (next) {
     }
 
     // Check for similar prior health records for repeat detection
-    // Escape regex special characters for safe pattern matching
-    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\    if (this.isNew) {
+    if (this.isNew) {
       const HealthRecord = mongoose.model('HealthRecord');
       const priorRecord = await HealthRecord.findOne({
         rabbit_id: this.rabbit_id,
@@ -96,21 +95,7 @@ healthRecordSchema.pre('save', async function (next) {
         this.is_repeat = true;
       }
     }
-');
 
-    // Check for similar prior health records for repeat detection
-    if (this.isNew) {
-      const HealthRecord = mongoose.model('HealthRecord');
-      const priorRecord = await HealthRecord.findOne({
-        rabbit_id: this.rabbit_id,
-        issue: new RegExp(escapeRegex(this.issue), 'i'),
-        _id: { $ne: this._id },
-      }).sort({ record_date: -1 });
-
-      if (priorRecord) {
-        this.is_repeat = true;
-      }
-    }
     next();
   } catch (error) {
     next(error as Error);
