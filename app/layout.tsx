@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SunguraSmart[SS]",
+  title: "SunguraSmart",
   description: "Rabbit Farm Digital Management System",
 };
 

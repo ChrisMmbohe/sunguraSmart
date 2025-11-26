@@ -172,10 +172,9 @@ export function DataTable<TData, TValue>({
                 .getAllColumns()
                 .filter(
                   (column) =>
-                    typeof column.accessorFn !== "undefined" && column.getCanHide()
+                    (typeof column.accessorFn !== "undefined" || column.accessorKey) && column.getCanHide()
                 )
-                .map((column) => {
-                  return (
+                .map((column) => {                  return (
                     <DropdownMenuCheckboxItem
                       key={column.id}
                       className="capitalize"

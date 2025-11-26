@@ -1,10 +1,9 @@
-// app/api/cage/route.ts   ← FIXED & IMPROVED VERSION
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Cage from "@/database/cage.model";
 
 /**
- * POST: Create a new cage (unchanged, just cleaner)
+ * POST: Create a new cage
  */
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +11,11 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    const { cage_id, capacity = 1, location = null, notes = null } = body;
+    // Ensure capacity is parsed correctly if it exists, defaulting to 1
+    let { cage_id, capacity: capacityRaw = 1, location = null, notes = null } = body;
+
+    // Attempt to convert capacity to an integer, if it was sent as a string (common for JSON payloads)
+    const capacity = typeof capacityRaw === 'string' ? parseInt(capacityRaw, 10) : capacityRaw;
 
     if (!cage_id || typeof cage_id !== "string" || cage_id.trim() === "") {
       return NextResponse.json(
@@ -21,7 +24,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (capacity < 1 || !Number.isInteger(capacity)) {
+    // Apply the suggested change to check for integer type first
+    if (!Number.isInteger(capacity) || capacity < 1) {
       return NextResponse.json(
         { message: "capacity must be an integer ≥ 1" },
         { status: 400 }
@@ -38,7 +42,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         message: "Cage created successfully",
-        cage: newCage.toObject({ virtuals: true }),
+        // Assuming toObject({ virtuals: true }) is necessary for model output
+        cage: newCage.toObject({ virtuals: true }), 
       },
       { status: 201 }
     );
@@ -63,14 +68,14 @@ export async function POST(req: NextRequest) {
  * GET: Fetch cages with powerful filtering
  *
  * Supported query parameters:
- *   ?location=barn              → case-insensitive partial match
- *   ?available=true             → only cages with available_slots > 0
- *   ?full=true                  → only completely full cages
- *   ?occupancy_gt=2             → occupancy > 2
- *   ?occupancy_gte=3            → occupancy ≥ 3
- *   ?occupancy_lt=5             → occupancy < 5
- *   ?occupancy_lte=4            → occupancy ≤ 4
- *   ?occupancy=6                → exact occupancy
+ * ?location=barn              → case-insensitive partial match
+ * ?available=true             → only cages with available_slots > 0
+ * ?full=true                  → only completely full cages
+ * ?occupancy_gt=2             → occupancy > 2
+ * ?occupancy_gte=3            → occupancy ≥ 3
+ * ?occupancy_lt=5             → occupancy < 5
+ * ?occupancy_lte=4            → occupancy ≤ 4
+ * ?occupancy=6                → exact occupancy
  */
 export async function GET(req: NextRequest) {
   try {
@@ -83,10 +88,12 @@ export async function GET(req: NextRequest) {
 
     const location = searchParams.get("location");
     if (location) {
-      filter.location = new RegExp(location.trim(), "i");
+      // Escape special characters in the regex query
+      const escapedLocation = location.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+      filter.location = new RegExp(escapedLocation, "i");
     }
-
-    // Fetch all matching cages and populate occupancy count
+    
+    // Fetch all matching cages and populate occupancy count (assuming a virtual property/populate setup)
     const cageDocs = await Cage.find(filter)
       .sort({ cage_id: 1 })
       .populate("occupancy") // ← adds occupancy count

@@ -1,21 +1,64 @@
-// Export all models alphabetically for single import
-export { default as Breed } from './breed.model';
-export { default as Breeding } from './breeding.model';
-export { default as Cage } from './cage.model';
-export { default as Cull } from './cull.model';
-export { default as Death } from './death.model';
-export { default as Disease } from './disease.model';
-export { default as Expense } from './expense.model';
-export { default as FeedLog } from './feed-log.model';
-export { default as FeedType } from './feed-type.model';
-export { default as HealthRecord } from './health-record.model';
-export { default as Litter } from './litter.model';
-export { default as Rabbit } from './rabbit.model';
-export { default as Sale } from './sale.model';
-export { default as Schedule } from './schedule.model';
-export { default as Weight } from './weight.model';
+import Breed from './breed.model';
+import Breeding from './breeding.model';
+import Cage from './cage.model';
+import Cull from './cull.model';
+import Death from './death.model';
+import Disease from './disease.model';
+import Expense from './expense.model';
+import FeedLog from './feed-log.model';
+import FeedType from './feed-type.model';
+import HealthRecord from './health-record.model';
+import Litter from './litter.model';
+import Rabbit from './rabbit.model';
+import Sale from './sale.model';
+import Schedule from './schedule.model';
+import Weight from './weight.model';
 
-// Export interfaces for type safety
+/**
+ * 💡 FIX: Explicitly exports the initModels function.
+ * This function is called by connectDB (in mongodb.ts) to guarantee all models 
+ * are registered (by forcing module execution) before Mongoose operations begin, 
+ * preventing "OverwriteModelError".
+ */
+export function initModels() {
+  // Accessing the imported models ensures their module code (with mongoose.model()) runs.
+  void Breed;
+  void Breeding;
+  void Cage;
+  void Cull;
+  void Death;
+  void Disease;
+  void Expense;
+  void FeedLog;
+  void FeedType;
+  void HealthRecord;
+  void Litter;
+  void Rabbit;
+  void Sale;
+  void Schedule;
+  void Weight;
+}
+
+// Re-export all models using named exports for single import access across the application
+export { 
+    Breed,
+    Breeding,
+    Cage,
+    Cull,
+    Death,
+    Disease,
+    Expense,
+    FeedLog,
+    FeedType,
+    HealthRecord,
+    Litter,
+    Rabbit,
+    Sale,
+    Schedule,
+    Weight
+};
+
+// Export interfaces for type safety (this section remains the same)
 export type { IBreed } from './breed.model';
 export type { IBreeding } from './breeding.model';
 export type { ICage } from './cage.model';

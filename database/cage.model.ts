@@ -46,14 +46,24 @@ const cageSchema = new Schema<ICage, ICageModel>(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
+    // Ensure virtuals are serialized even when not explicitly populated
+    toJSON: { virtuals: true }, 
     toObject: { virtuals: true },
   }
 );
 
 // ──────────────────────────────────────────────────────
-// Real-time occupancy virtual (populates automatically)
+// Virtuals for Occupancy, Slots, and Full Status
 // ──────────────────────────────────────────────────────
+
+/**
+ * ⚠️ CRITICAL NOTE:
+ * These virtuals (occupancy, available_slots, is_full) depend on Virtual Populate.
+ * They will ONLY contain correct values if the query explicitly uses:
+ * .populate('occupancy')
+ * Failure to populate 'occupancy' will cause available_slots and is_full
+ * to rely on a null/undefined occupancy, leading to incorrect calculations.
+ */
 cageSchema.virtual('occupancy', {
   ref: 'Rabbit',
   localField: '_id',
@@ -62,19 +72,17 @@ cageSchema.virtual('occupancy', {
 });
 
 cageSchema.virtual('available_slots').get(function () {
+  // occupancy will be 0 if unpopulated or if there are no rabbits
   return this.capacity - (this.occupancy || 0);
 });
 
 cageSchema.virtual('is_full').get(function () {
+  // occupancy will be 0 if unpopulated or if there are no rabbits
   return (this.occupancy || 0) >= this.capacity;
 });
 
-// Ensure virtuals are serialized
-cageSchema.set('toJSON', { virtuals: true });
-cageSchema.set('toObject', { virtuals: true });
-
 // Indexes
-cageSchema.index({ cage_id: 1 });
+//cageSchema.index({ cage_id: 1 });
 
 const Cage = (mongoose.models.Cage as ICageModel) ||
   mongoose.model<ICage, ICageModel>('Cage', cageSchema);

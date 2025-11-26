@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import * as Models from '@/database/index'; // <-- Import ALL your models bundle
+// ✅ FIX: Changed import to explicitly bring in initModels
+import { initModels } from '@/database/index'; 
 
 // Extend the global object with mongoose cache type
 declare global {
@@ -26,15 +27,16 @@ if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
 }
 
-// Helper function to force load all model files
+/**
+ * Helper function to force load all model files by calling the explicit 
+ * registration function from the models index.
+ */
 function loadModels() {
-  // Accessing the Models object exported by index.ts forces 
-  // all module imports (and thus, model registrations) to execute.
+  // Check if any model is currently registered in Mongoose.
   if (Object.keys(mongoose.models).length === 0) {
     console.log('--- Registering Mongoose Models ---');
-    // Using 'void' to access the object without lint warnings
-    // The side effect (module execution) is what we need.
-    void Models; 
+    // ✅ FIX: Call the explicit registration function
+    initModels(); 
   }
 }
 
@@ -47,8 +49,7 @@ function loadModels() {
 async function connectDB(): Promise<mongoose.Connection> {
   // Return existing connection if already established
   if (cached.conn) {
-    // 💡 CRITICAL: Ensure models are loaded even if connection is cached, 
-    // in case of hot-reloading or import order issues.
+    // 💡 CRITICAL: Ensure models are loaded even if connection is cached
     loadModels();
     return cached.conn;
   }

@@ -98,7 +98,7 @@ saleSchema.statics.getTotalIncome = async function (
 };
 
 // Indexes
-saleSchema.index({ rabbit_id: 1 });
+// saleSchema.index({ rabbit_id: 1 });
 saleSchema.index({ user_id: 1, sale_date: -1 });
 
 const Sale = (mongoose.models.Sale as ISaleModel) || mongoose.model<ISale, ISaleModel>('Sale', saleSchema);

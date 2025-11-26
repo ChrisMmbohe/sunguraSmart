@@ -68,7 +68,7 @@ cullSchema.pre('save', async function (next) {
 });
 
 // Indexes
-cullSchema.index({ rabbit_id: 1 });
+// cullSchema.index({ rabbit_id: 1 });
 
 const Cull = (mongoose.models.Cull as ICullModel) || mongoose.model<ICull, ICullModel>('Cull', cullSchema);
 

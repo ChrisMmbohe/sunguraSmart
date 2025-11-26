@@ -80,7 +80,7 @@ breedSchema.statics.getByCharacteristics = async function (query: { weight?: num
 };
 
 // Indexes for efficient queries
-breedSchema.index({ name: 1 });
+//breedSchema.index({ name: 1 });
 
 // Ensure virtuals are included in JSON
 breedSchema.set('toJSON', { virtuals: true });

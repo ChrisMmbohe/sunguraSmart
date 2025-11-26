@@ -46,7 +46,7 @@ const diseaseSchema = new Schema<IDisease, IDiseaseModel>(
 );
 
 // Indexes
-diseaseSchema.index({ name: 1 });
+//diseaseSchema.index({ name: 1 });
 
 const Disease = (mongoose.models.Disease as IDiseaseModel) || mongoose.model<IDisease, IDiseaseModel>('Disease', diseaseSchema);
 

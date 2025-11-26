@@ -62,7 +62,7 @@ deathSchema.pre('save', async function (next) {
 });
 
 // Indexes
-deathSchema.index({ rabbit_id: 1 });
+// deathSchema.index({ rabbit_id: 1 });
 
 const Death = (mongoose.models.Death as IDeathModel) || mongoose.model<IDeath, IDeathModel>('Death', deathSchema);
 

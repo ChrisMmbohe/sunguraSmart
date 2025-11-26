@@ -22,7 +22,7 @@ import {ThemeLogo} from "@/components/ui/themelogo";
 import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import {Button} from "@/components/ui/button";
 import Link from "next/link"
-
+import { Separator } from "./ui/separator"
 
 
 const data = {
@@ -31,7 +31,6 @@ const data = {
             title: "Dashboard",
             url: "/dashboard",
             emoji: "📊",
-            isActive: true,
             
         },
         {
@@ -103,11 +102,11 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return (
-        <Sidebar variant="inset" {...props}>
+        <Sidebar collapsible="icon" variant="inset" {...props}>
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
+                        <SidebarMenuButton size="lg" asChild tooltip="SUNGURA SMART">
                             <Link href="/">
                                 <ThemeLogo />
                                 <div className="grid flex-1 text-left text-sm leading-tight">
@@ -119,9 +118,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
-            <SidebarContent>
-                <NavMain menu={data.menu as { title: string; url: string; icon: React.ForwardRefExoticComponent<any>; isActive?: boolean }[]} />
+            <SidebarContent className="flex-1 overflow-y-auto">
+                <NavMain menu={data.menu as { title: string; url: string; emoji: string; isActive?: boolean }[]} />                <Separator />
                 <NavProjects projects={data.projects} />
+                <Separator />
                 <NavSecondary items={data.navSecondary} className="mt-auto" />
             </SidebarContent>
             <SidebarFooter>
@@ -135,7 +135,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 <SignInButton mode="modal">
                                     <Button className="w-full" >
                                         <LogIn className="h-4 w-4" />
-                                        <span>Sign In / Sign Up</span>
+                                        <span className="group-data-[collapsible=icon]:hidden">Sign In / Sign Up</span>
                                     </Button>
                                 </SignInButton>
                             </div>

@@ -1,6 +1,5 @@
-// app/api/breed/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
+// app/api/breeds/route.ts
+import { NextRequest, NextResponse } from "next/server";import connectDB from "@/lib/mongodb";
 import Breed from "@/database/breed.model"; // assuming your model is exported from here
 
 /**
@@ -39,11 +38,15 @@ export async function POST(req: NextRequest) {
       }
     } catch (parseError) {
       return NextResponse.json(
-        { message: "Invalid JSON in breed_colors, recommended_feed, or description" },
+        { message: "Invalid JSON in breed_colors or recommended_feed" },
         { status: 400 }
       );
-    }
-
+     } catch (parseError) {
+       return NextResponse.json(
+         { message: "Invalid JSON in breed_colors or recommended_feed" },
+         { status: 400 }
+       );
+     }
     // Required field
     const name = (rawData.name as string)?.trim();
     if (!name) {

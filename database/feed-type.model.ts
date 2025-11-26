@@ -53,7 +53,7 @@ feedTypeSchema.virtual('weekly_need_per_rabbit').get(function () {
   return this.daily_recommendation_per_rabbit * 7;
 });
 // Indexes
-feedTypeSchema.index({ name: 1 });
+//feedTypeSchema.index({ name: 1 });
 
 feedTypeSchema.set('toJSON', { virtuals: true });
 feedTypeSchema.set('toObject', { virtuals: true });
