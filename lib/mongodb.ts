@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
+// ✅ FIX: Changed import to explicitly bring in initModels
+import { initModels } from '@/database/index'; 
 
 // Extend the global object with mongoose cache type
 declare global {
-  // eslint-disable-next-line no-var
+  
   var mongoose: {
     conn: mongoose.Connection | null;
     promise: Promise<mongoose.Connection> | null;
@@ -10,7 +12,7 @@ declare global {
 }
 
 // Retrieve MongoDB URI from environment variables
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI: string = process.env.MONGODB_URI as string;
 
 if (!MONGODB_URI) {
   throw new Error(
@@ -19,7 +21,6 @@ if (!MONGODB_URI) {
 }
 
 // Initialize global cache for connection
-// This prevents multiple connections during development hot-reloading
 let cached = global.mongoose;
 
 if (!cached) {
@@ -27,16 +28,29 @@ if (!cached) {
 }
 
 /**
+ * Helper function to force load all model files by calling the explicit 
+ * registration function from the models index.
+ */
+function loadModels() {
+  // Check if any model is currently registered in Mongoose.
+  if (Object.keys(mongoose.models).length === 0) {
+    console.log('--- Registering Mongoose Models ---');
+    // ✅ FIX: Call the explicit registration function
+    initModels(); 
+  }
+}
+
+/**
  * Establishes and returns a cached MongoDB connection using Mongoose.
- * 
- * In development, Next.js hot-reloading can create multiple connections.
+ * * In development, Next.js hot-reloading can create multiple connections.
  * This function caches the connection globally to prevent connection exhaustion.
- * 
- * @returns {Promise<mongoose.Connection>} The active MongoDB connection
+ * * @returns {Promise<mongoose.Connection>} The active MongoDB connection
  */
 async function connectDB(): Promise<mongoose.Connection> {
   // Return existing connection if already established
   if (cached.conn) {
+    // 💡 CRITICAL: Ensure models are loaded even if connection is cached
+    loadModels();
     return cached.conn;
   }
 
@@ -47,6 +61,8 @@ async function connectDB(): Promise<mongoose.Connection> {
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
+      // Load models immediately after connection success
+      loadModels(); 
       return mongooseInstance.connection;
     });
   }
@@ -54,6 +70,8 @@ async function connectDB(): Promise<mongoose.Connection> {
   try {
     // Wait for the connection promise to resolve
     cached.conn = await cached.promise;
+    // Final check after connection establishment
+    loadModels();
   } catch (error) {
     // Reset promise on connection failure to allow retry
     cached.promise = null;

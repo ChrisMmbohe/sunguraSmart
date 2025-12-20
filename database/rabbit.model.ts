@@ -1,295 +1,164 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema} from 'mongoose';
+import { IRabbit, IBreed, RabbitStatus, IRabbitModel, IRabbitStats } from './types';
 
-type Gender = 'Male' | 'Female';
-type AcquisitionType = 'born' | 'purchased' | 'gift' | 'other' | null;
-type Status = 'Active' | 'Sold' | 'Deceased' | 'Culled';
-type MaturityStatus = 'Kit' | 'Junior' | 'Adult' | 'Senior';
-
-export interface IRabbit extends Document {
-  tag_id: string;
-  name: string | null;
-  breed_id: mongoose.Types.ObjectId | null;
-  gender: Gender;
-  date_of_birth: Date | null;
-  acquisition_date: Date | null;
-  acquisition_type: AcquisitionType;
-  source_farm: string | null;
-  cage_id: mongoose.Types.ObjectId | null;
-  photo: string | null;
-  color: string | null;
-  category: string | null;
-  notes: string | null;
-  sire_id: mongoose.Types.ObjectId | null;
-  dam_id: mongoose.Types.ObjectId | null;
-  user_id: string | null;
-  status: Status;
-  is_pregnant: boolean;
-  last_breeding_date: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  // Virtuals
-  age_in_days: number;
-  maturity_status: MaturityStatus;
-  is_mature: boolean;
-  full_name: string;
-  daily_feed_needed: { pellets: number; hay: number };
-}
-
-export interface PopulationStats {
-  total: number;
-  male: number;
-  female: number;
-  active: number;
-  deceased: number;
-  sold: number;
-  culled: number;
-  sick: number;
-  pregnant: number;
-  mature: number;
-  by_breed: Array<{ breed: string; count: number }>;
-}
-export interface IRabbitModel extends Model<IRabbit> {
-  getPopulationStats(userId: string): Promise<PopulationStats>;
-}
-const rabbitSchema = new Schema<IRabbit, IRabbitModel>(
-  {
-    tag_id: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-    name: {
-      type: String,
-      default: null,
-    },
-    breed_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Breed',
-      default: null,
-    },
-    gender: {
-      type: String,
-      enum: ['Male', 'Female'],
-      required: true,
-    },
-    date_of_birth: {
-      type: Date,
-      default: null,
-    },
-    acquisition_date: {
-      type: Date,
-      default: null,
-    },
-    acquisition_type: {
-      type: String,
-      enum: ['born', 'purchased', 'gift', 'other', null],
-      default: null,
-    },
-    source_farm: {
-      type: String,
-      default: null,
-    },
-    cage_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Cage',
-      default: null,
-    },
-    photo: {
-      type: String,
-      default: null,
-    },
-    color: {
-      type: String,
-      default: null,
-    },
-    category: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-    sire_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      default: null,
-    },
-    dam_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      default: null,
-    },
-    user_id: {
-      type: String,
-      default: null,
-    },
+const RabbitSchema = new Schema<IRabbit>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    // Scalable Identifier: Application layer enforces pattern like D-DOEID-SEQ or YYYYMM-SEQ
+    ear_tag_id: { type: String, required: true, unique: true, trim: true }, 
+    name: { type: String, default: null, trim: true },
+    gender: { type: String, enum: ['Male', 'Female'], required: true, index: true },
+    date_of_birth: { type: Date, required: true },
+    breed_id: { type: Schema.Types.ObjectId, ref: 'Breed', required: true },
+    current_cage_id: { type: Schema.Types.ObjectId, ref: 'Cage', index: true, required: true },
     status: {
-      type: String,
-      enum: ['Active', 'Sold', 'Deceased', 'Culled'],
-      default: 'Active',
-      required: true,
+        type: String,
+        enum: ['Kit', 'Weaner', 'Grower', 'Active', 'Sick', 'Quarantined', 'Culled', 'Deceased', 'Sold'],
+        default: 'Kit',
+        index: true
     },
-    is_pregnant: {
-      type: Boolean,
-      default: false,
-    },
-    last_breeding_date: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+    // SOURCE OF RABBITS fields
+    source_type: { type: String, enum: ['Born', 'Purchased', 'Gifted'], required: true, default: 'Born' },
+    source_farm: { type: String, default: null }, // Seller or Gifting Farm
+    parent_doe_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
+    parent_buck_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
+    // ✅ FIX: Added the field/virtual for pregnancy status
+    is_pregnant: { type: Boolean, default: false },
+}, { timestamps: true, toJSON: { virtuals: true } });
 
-// Pre-save validation and business rules enforcement
-rabbitSchema.pre('save', async function (next) {
-  try {
-    // Normalize dates to UTC midnight
-    if (this.date_of_birth) {
-      this.date_of_birth = new Date(this.date_of_birth.setUTCHours(0, 0, 0, 0));
+// Virtual for Age calculation
+RabbitSchema.virtual('age_in_days').get(function() {
+    if (!this.date_of_birth) return 0;
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - this.date_of_birth.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+});
+
+// Virtual for Full Name (e.g., A1-123 - Bunny)
+RabbitSchema.virtual('full_name').get(function() {
+    // If a name exists, return Tag ID - Name, otherwise just the Tag ID
+    if (this.name) {
+        return `${this.ear_tag_id} - ${this.name}`;
     }
-    if (this.acquisition_date) {
-      this.acquisition_date = new Date(this.acquisition_date.setUTCHours(0, 0, 0, 0));
+    return this.ear_tag_id;
+});
+
+// Virtual for Maturity Status
+RabbitSchema.virtual('maturity_status').get(function() {
+    // This virtual simply reflects the status derived from age, which is calculated in the pre('save') hook.
+    switch (this.status) {
+        case 'Kit':
+        case 'Weaner':
+            return 'Immature';
+        case 'Grower':
+            return 'Growing';
+        case 'Active':
+            return 'Mature';
+        default:
+            return 'N/A';
     }
+});
 
-    // Enforce: is_pregnant only for females
-    if (this.gender !== 'Female' && this.is_pregnant) {
-      throw new Error('Only female rabbits can be pregnant');
+
+/**
+ * Static method to fetch key statistics for the rabbit dashboard.
+ * Counts rabbits that are NOT marked as terminal (Culled, Deceased, Sold).
+ * @param userId The ID of the user whose rabbits to query.
+ * @returns An object containing total, active, buck, and doe counts.
+ */
+RabbitSchema.statics.getStats = async function(userId: string): Promise<IRabbitStats> {
+    const nonTerminalStatuses: RabbitStatus[] = ['Kit', 'Weaner', 'Grower', 'Active', 'Sick', 'Quarantined'];
+    
+    // Base filter for all non-terminal rabbits belonging to the user
+    const baseFilter = {
+        user_id: userId,
+        status: { $in: nonTerminalStatuses }
+    };
+
+    try {
+        // 1. Total Rabbits (Non-terminal)
+        const total = await this.countDocuments(baseFilter);
+
+        // 2. Active Rabbits (Mature, non-terminal)
+        const active = await this.countDocuments({
+            ...baseFilter,
+            status: 'Active'
+        });
+
+        // 3. Bucks (Non-terminal)
+        const bucks = await this.countDocuments({
+            ...baseFilter,
+            gender: 'Male'
+        });
+
+        // 4. Does (Non-terminal)
+        const does = await this.countDocuments({
+            ...baseFilter,
+            gender: 'Female'
+        });
+
+        return {
+            total,
+            active,
+            bucks,
+            does
+        };
+    } catch (error) {
+        console.error("Error fetching rabbit statistics:", error);
+        // Return zeros on error to prevent API from crashing
+        return { total: 0, active: 0, bucks: 0, does: 0 };
     }
+};
 
-    // Validate: sire_id !== _id (rabbit cannot be its own parent)
-    if (this.sire_id && this.sire_id.equals(this._id)) {
-      throw new Error('Rabbit cannot be its own sire');
-    }
-    if (this.dam_id && this.dam_id.equals(this._id)) {
-      throw new Error('Rabbit cannot be its own dam');
-    }
 
-    // If acquisition_type is 'born', require sire_id and dam_id
-    if (this.acquisition_type === 'born') {
-      if (!this.sire_id || !this.dam_id) {
-        throw new Error('Born rabbits must have both sire_id and dam_id');
-      }
+// Pre-Save Middleware for Automatic Status Update (Growth Stages)
+RabbitSchema.pre('save', async function(next) {
+    const doc = this as IRabbit & mongoose.Document;
 
-      // Validate parents exist
-      if (this.isNew || this.isModified('sire_id') || this.isModified('dam_id')) {
-        const Rabbit = mongoose.model('Rabbit');
-        const [sire, dam] = await Promise.all([
-          Rabbit.findById(this.sire_id),
-          Rabbit.findById(this.dam_id),
-        ]);
+    // Terminal or Override statuses skip growth calculation
+    const terminalOrOverrideStatuses: RabbitStatus[] = ['Sick', 'Quarantined', 'Culled', 'Deceased', 'Sold'];
 
-        if (!sire) throw new Error('Sire not found');
-        if (!dam) throw new Error('Dam not found');
-        if (sire.gender !== 'Male') throw new Error('Sire must be male');
-        if (dam.gender !== 'Female') throw new Error('Dam must be female');
-      }
+    if (doc.isModified('date_of_birth') || doc.isNew || !terminalOrOverrideStatuses.includes(doc.status)) {
+        const ageDays = doc.age_in_days;
+
+        // Fetch breed growth stages (Business Rule)
+        const breedStages = { maturity: 150, weaning: 30, grower: 60 };
+        try {
+            if (doc.breed_id && mongoose.models.Breed) {
+                const breed = await mongoose.model<IBreed>('Breed').findById(doc.breed_id).select('maturity_age_days weaning_age_days grower_age_days').lean();
+                if (breed) {
+                    breedStages.maturity = breed.maturity_age_days;
+                    breedStages.weaning = breed.weaning_age_days;
+                    breedStages.grower = breed.grower_age_days;
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching breed for status update:", error);
+        }
+
+        let newStatus: RabbitStatus = 'Kit'; // Default
+
+        if (ageDays >= breedStages.maturity) {
+            newStatus = 'Active'; // Mature rabbit
+        } else if (ageDays >= breedStages.grower) {
+            newStatus = 'Grower'; // 60 days up to maturity
+        } else if (ageDays >= breedStages.weaning) {
+            newStatus = 'Weaner'; // 30-59 days
+        } else {
+            newStatus = 'Kit'; // 0-29 days
+        }
+        
+        // Only update the status if the current status is a growth stage, 
+        // ensuring 'Sick' or 'Quarantined' status is maintained until cleared.
+        if (['Kit', 'Weaner', 'Grower', 'Active'].includes(doc.status) || doc.isNew) {
+             doc.status = newStatus;
+        }
     }
 
     next();
-  } catch (error) {
-    next(error as Error);
-  }
 });
 
-// Virtual: Calculate age in days
-rabbitSchema.virtual('age_in_days').get(function () {
-  if (!this.date_of_birth) return 0;
-  return Math.floor((Date.now() - this.date_of_birth.getTime()) / 86400000);
-});
+RabbitSchema.index({ user_id: 1, status: 1 });
+RabbitSchema.index({ user_id: 1, ear_tag_id: 1 });
 
-// Virtual: Maturity status based on age
-rabbitSchema.virtual('maturity_status').get(function (): MaturityStatus {
-  const age = this.age_in_days;
-  if (age <= 56) return 'Kit';
-  if (age <= 112) return 'Junior';
-  if (age <= 365) return 'Adult';
-  return 'Senior';
-});
-
-// Virtual: Is mature (>= 112 days / ~16 weeks)
-rabbitSchema.virtual('is_mature').get(function () {
-  return this.age_in_days >= 112;
-});
-
-// Virtual: Full name fallback to tag_id
-rabbitSchema.virtual('full_name').get(function () {
-  return this.name || this.tag_id;
-});
-
-// Virtual: Daily feed requirements for feed management
-rabbitSchema.virtual('daily_feed_needed').get(function () {
-  return {
-    pellets: 100, // grams per day
-    hay: 1 / 14, // 1 bale per 2 weeks = 0.071 bale/day
-  };
-});
-
-// Static: Aggregate population statistics for dashboard efficiency
-rabbitSchema.statics.getPopulationStats = async function (userId: string): Promise<PopulationStats> {
-  const filter = userId ? { user_id: userId } : {};
-
-  const [counts, breedCounts] = await Promise.all([
-    this.aggregate([
-      { $match: filter },
-      {
-        $facet: {
-          total: [{ $count: 'count' }],
-          by_gender: [{ $group: { _id: '$gender', count: { $sum: 1 } } }],
-          by_status: [{ $group: { _id: '$status', count: { $sum: 1 } } }],
-          pregnant: [{ $match: { is_pregnant: true } }, { $count: 'count' }],
-          mature: [
-            {
-              $match: {
-                date_of_birth: { $lte: new Date(Date.now() - 112 * 86400000) },
-              },
-            },
-            { $count: 'count' },
-          ],
-        },
-      },
-    ]),
-    this.aggregate([
-      { $match: filter },
-      { $group: { _id: '$breed_id', count: { $sum: 1 } } },
-      { $lookup: { from: 'breeds', localField: '_id', foreignField: '_id', as: 'breed' } },
-      { $unwind: { path: '$breed', preserveNullAndEmptyArrays: true } },
-      { $project: { breed: { $ifNull: ['$breed.name', 'Unknown'] }, count: 1 } },
-    ]),
-  ]);
-
-  const result = counts[0];
-  const genderMap = new Map(result.by_gender.map((g: { _id: string; count: number }) => [g._id, g.count]));
-  const statusMap = new Map(result.by_status.map((s: { _id: string; count: number }) => [s._id, s.count]));
-
-  return {
-    total: result.total[0]?.count || 0,
-    male: genderMap.get('Male') || 0,
-    female: genderMap.get('Female') || 0,
-    active: statusMap.get('Active') || 0,
-    deceased: statusMap.get('Deceased') || 0,
-    sold: statusMap.get('Sold') || 0,
-    culled: statusMap.get('Culled') || 0,
-    sick: 0, // Populated via HealthRecord aggregation
-    pregnant: result.pregnant[0]?.count || 0,
-    mature: result.mature[0]?.count || 0,
-    by_breed: breedCounts,
-  };
-};
-
-// Indexes for query optimization
-rabbitSchema.index({ tag_id: 1 });
-rabbitSchema.index({ user_id: 1, status: 1, gender: 1 });
-rabbitSchema.index({ user_id: 1, status: 1, gender: 1 });rabbitSchema.index({ is_pregnant: 1 }, { sparse: true });
-rabbitSchema.index({ date_of_birth: -1 });
-
-rabbitSchema.set('toJSON', { virtuals: true });
-rabbitSchema.set('toObject', { virtuals: true });
-
-const Rabbit = (mongoose.models.Rabbit as IRabbitModel) || mongoose.model<IRabbit, IRabbitModel>('Rabbit', rabbitSchema);
-
-export default Rabbit;
+// Cast the model to the extended interface IRabbitModel
+export const Rabbit = (mongoose.models.Rabbit || mongoose.model<IRabbit, IRabbitModel>('Rabbit', RabbitSchema)) as IRabbitModel;

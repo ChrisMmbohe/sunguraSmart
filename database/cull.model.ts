@@ -1,75 +1,18 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
+import { ICull, IRabbit } from './types';
 
-export interface ICull extends Document {
-  rabbit_id: mongoose.Types.ObjectId;
-  cull_date: Date;
-  reason: string | null;
-  destination: string | null;
-  notes: string | null;
-  user_id: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+const CullSchema = new Schema<ICull>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    rabbit_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', required: true, unique: true },
+    date_culled: { type: Date, required: true },
+    reason: { type: String, enum: ['Meat', 'Health', 'Poor Performance', 'Other'], required: true },
+}, { timestamps: true });
 
-interface ICullModel extends Model<ICull> {}
-
-const cullSchema = new Schema<ICull, ICullModel>(
-  {
-    rabbit_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      required: true,
-      unique: true,
-    },
-    cull_date: {
-      type: Date,
-      required: true,
-    },
-    reason: {
-      type: String,
-      default: null,
-    },
-    destination: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-    user_id: {
-      type: String,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
-
-// Pre-save: Update rabbit status to 'Culled' for status sync
-cullSchema.pre('save', async function (next) {
-  try {
-    this.cull_date = new Date(this.cull_date.setUTCHours(0, 0, 0, 0));
-
-    const Rabbit = mongoose.model('Rabbit');
-    const rabbit = await Rabbit.findById(this.rabbit_id);
-
-    if (!rabbit) throw new Error('Rabbit not found');
-
-    // Sync status
-    rabbit.status = 'Culled';
-    await rabbit.save();
-
-    next();
-  } catch (error) {
-    next(error as Error);
-  }
+// Post-Save Middleware to update Rabbit status to Culled
+CullSchema.post('save', async function(doc) {
+    if (mongoose.models.Rabbit) {
+        await mongoose.model<IRabbit>('Rabbit').findByIdAndUpdate(doc.rabbit_id, { status: 'Culled' });
+    }
 });
 
-// Indexes
-cullSchema.index({ rabbit_id: 1 });
-
-const Cull = (mongoose.models.Cull as ICullModel) || mongoose.model<ICull, ICullModel>('Cull', cullSchema);
-
-export default Cull;
+export const Cull = (mongoose.models.Cull || mongoose.model<ICull>('Cull', CullSchema)) as Model<ICull>;

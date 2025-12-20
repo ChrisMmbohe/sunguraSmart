@@ -1,60 +1,23 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
+import { ICage } from './types';
 
-export interface ICage extends Document {
-  cage_id: string;
-  capacity: number;
-  location: string | null;
-  notes: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  // Virtuals
-  occupancy: number;
-}
-
-interface ICageModel extends Model<ICage> {}
-
-const cageSchema = new Schema<ICage, ICageModel>(
-  {
-    cage_id: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
+const CageSchema = new Schema<ICage>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    // A1-A12, B1-B12, C1-C12 etc.
+    name: { type: String, required: true, trim: true, unique: true }, 
+    // Tier A, Tier B, Quarantine Section
+    location_area: { type: String, required: true, trim: true }, 
+    capacity: { type: Number, required: true, min: 1, default: 1 },
+    current_occupants: [{ type: Schema.Types.ObjectId, ref: 'Rabbit', default: [] }],
+    cage_type: { 
+        type: String, 
+        enum: ['Buck', 'Doe', 'Grower', 'Quarantine', 'Nesting'], 
+        required: true, 
+        index: true 
     },
-    capacity: {
-      type: Number,
-      default: 1,
-      min: 1,
-    },
-    location: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+}, { timestamps: true });
 
-// Validate capacity is positive
-cageSchema.pre('save', function (next) {
-  if (this.capacity <= 0) {
-    return next(new Error('Capacity must be greater than 0'));
-  }
-  next();
-});
+// Index for distribution queries
+CageSchema.index({ user_id: 1, cage_type: 1 });
 
-
-// Indexes
-cageSchema.index({ cage_id: 1 });
-
-cageSchema.set('toJSON', { virtuals: true });
-cageSchema.set('toObject', { virtuals: true });
-
-const Cage = (mongoose.models.Cage as ICageModel) || mongoose.model<ICage, ICageModel>('Cage', cageSchema);
-
-export default Cage;
+export const Cage = (mongoose.models.Cage || mongoose.model<ICage>('Cage', CageSchema)) as Model<ICage>;

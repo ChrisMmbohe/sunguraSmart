@@ -1,106 +1,60 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+// ✅ FIX: Change import to ISaleModel
+import { ISale, ISaleModel } from './types';
 
-export interface ISale extends Document {
-  rabbit_id: mongoose.Types.ObjectId;
-  sale_date: Date;
-  sale_price: number;
-  buyer_name: string | null;
-  buyer_contact: string | null;
-  notes: string | null;
-  user_id: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface ISaleModel extends Model<ISale> {
-  getTotalIncome(userId: string, period: { start: Date; end: Date }): Promise<number>;
-}
-
-const saleSchema = new Schema<ISale, ISaleModel>(
-  {
-    rabbit_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      required: true,
-      unique: true,
+const SaleSchema = new Schema<ISale>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    transaction_date: { type: Date, required: true, index: true }, // Index for P&L queries (7d, 30d, 90d)
+    amount_usd: { type: Number, required: true, min: 0 }, // Base currency
+    item_type: { 
+        type: String, 
+        enum: ['Rabbit', 'ByProduct', 'Other'], 
+        required: true, 
+        index: true 
     },
-    sale_date: {
-      type: Date,
-      required: true,
+    rabbit_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
+    // Explicitly allowing sale of by-products (manure, urine, pelts)
+    byproduct_type: { 
+        type: String, 
+        enum: ['Manure', 'Urine', 'Pelts', 'Other', null], 
+        default: null 
     },
-    sale_price: {
-      type: Number,
-      required: true,
-      min: 0.01,
-    },    buyer_name: {
-      type: String,
-      default: null,
-    },
-    buyer_contact: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-    user_id: {
-      type: String,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+    quantity_sold: { type: Number, required: true, min: 0 },
+    notes: { type: String, default: null },
+}, { timestamps: true });
 
-// Pre-save: Update rabbit status to 'Sold' and validate price
-saleSchema.pre('save', async function (next) {
-  try {
-    if (this.sale_price <= 0) {
-      throw new Error('Sale price must be greater than 0');
-    }
-
-    this.sale_date.setUTCHours(0, 0, 0, 0);
-    const Rabbit = mongoose.model('Rabbit');
-    const rabbit = await Rabbit.findById(this.rabbit_id);
-
-    if (!rabbit) throw new Error('Rabbit not found');
-
-    rabbit.status = 'Sold';
-    await rabbit.save();
-
-    next();
-  } catch (error) {
-    next(error as Error);
-  }
-});
-
-// Static: Calculate total income for finance aggregation
-saleSchema.statics.getTotalIncome = async function (
-  userId: string,
-  period: { start: Date; end: Date }
+// --- STATIC METHOD IMPLEMENTATION ---
+SaleSchema.statics.getTotalIncome = async function(
+    userId: string,
+    dateRange: { start: Date; end: Date }
 ): Promise<number> {
-  const filter: Record<string, unknown> = {
-    sale_date: { $gte: period.start, $lte: period.end },
-  };
+    
+    // Mongoose aggregation pipeline to sum 'amount_usd' for sales within the date range
+    // and matching the user ID.
+    const result = await this.aggregate([
+        {
+            $match: {
+                user_id: userId,
+                transaction_date: {
+                    $gte: dateRange.start,
+                    $lte: dateRange.end,
+                },
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: '$amount_usd' },
+            },
+        },
+    ]);
 
-  if (userId) {
-    filter.user_id = userId;
-  }
-
-  const result = await this.aggregate([
-    { $match: filter },
-    { $group: { _id: null, total: { $sum: '$sale_price' } } },
-  ]);
-
-  return result[0]?.total || 0;
+    // Return the totalRevenue, or 0 if no sales were found
+    return result.length > 0 ? result[0].totalRevenue : 0;
 };
 
-// Indexes
-saleSchema.index({ rabbit_id: 1 });
-saleSchema.index({ user_id: 1, sale_date: -1 });
 
-const Sale = (mongoose.models.Sale as ISaleModel) || mongoose.model<ISale, ISaleModel>('Sale', saleSchema);
+SaleSchema.index({ user_id: 1, transaction_date: -1 });
 
-export default Sale;
+// ✅ FIX: Export Sale with the correct ISaleModel type
+export const Sale = (mongoose.models.Sale || mongoose.model<ISale, ISaleModel>('Sale', SaleSchema)) as ISaleModel;

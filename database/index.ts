@@ -1,33 +1,49 @@
-// Export all models alphabetically for single import
-export { default as Breed } from './breed.model';
-export { default as Breeding } from './breeding.model';
-export { default as Cage } from './cage.model';
-export { default as Cull } from './cull.model';
-export { default as Death } from './death.model';
-export { default as Disease } from './disease.model';
-export { default as Expense } from './expense.model';
-export { default as FeedLog } from './feed-log.model';
-export { default as FeedType } from './feed-type.model';
-export { default as HealthRecord } from './health-record.model';
-export { default as Litter } from './litter.model';
-export { default as Rabbit } from './rabbit.model';
-export { default as Sale } from './sale.model';
-export { default as Schedule } from './schedule.model';
-export { default as Weight } from './weight.model';
+// --- All Model Exports ---
+export * from './breed.model';
+export * from './cage.model';
+export * from './disease.model';
+export * from './feed-type.model';
+export * from './feed-log.model';
+export * from './rabbit.model';
+export * from './weight.model';
+export * from './health-record.model';
+export * from './litter.model';
+export * from './breeding.model';
+export * from './schedule.model';
+export * from './sale.model';
+export * from './expense.model';
+export * from './cull.model';
+export * from './death.model';
+export * from './types'; // Export global types
 
-// Export interfaces for type safety
-export type { IBreed } from './breed.model';
-export type { IBreeding } from './breeding.model';
-export type { ICage } from './cage.model';
-export type { ICull } from './cull.model';
-export type { IDeath } from './death.model';
-export type { IDisease } from './disease.model';
-export type { IExpense } from './expense.model';
-export type { IFeedLog } from './feed-log.model';
-export type { IFeedType } from './feed-type.model';
-export type { IHealthRecord } from './health-record.model';
-export type { ILitter } from './litter.model';
-export type { IRabbit } from './rabbit.model';
-export type { ISale } from './sale.model';
-export type { ISchedule } from './schedule.model';
-export type { IWeight } from './weight.model';
+// --- Explicit Model Imports for Initialization ---
+import { Breed } from './breed.model';
+import { Cage } from './cage.model';
+import { Disease } from './disease.model';
+import { FeedType } from './feed-type.model';
+import { FeedLog } from './feed-log.model';
+import { Rabbit } from './rabbit.model';
+import { Weight } from './weight.model';
+import { HealthRecord } from './health-record.model';
+import { Litter } from './litter.model';
+import { Breeding } from './breeding.model';
+import { Schedule } from './schedule.model';
+import { Sale } from './sale.model';
+import { Expense } from './expense.model';
+import { Cull } from './cull.model';
+import { Death } from './death.model';
+
+/**
+ * Helper function for Next.js environments to explicitly load and register all models.
+ * This is crucial for environments with hot-reloading to prevent ModelNotRegistered errors.
+ */
+export function initModels() {
+  // Accessing all imported constants ensures their Mongoose model creation logic runs.
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+ [
+    Breed, Cage, Disease, FeedType, FeedLog, Rabbit, Weight, 
+    HealthRecord, Litter, Breeding, Schedule, Sale, Expense, 
+    Cull, Death
+  ];
+  console.log('Successfully initialized all Mongoose models.');
+}

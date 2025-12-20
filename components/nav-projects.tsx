@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   type LucideIcon,
 } from "lucide-react"
+import { usePathname } from "next/navigation";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -38,30 +39,34 @@ export function NavProjects({
   projects: ProjectItem[]
 }) {
   const { isMobile } = useSidebar()
+  const pathname = usePathname();
 
   return (
-    <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Commerce</SidebarGroupLabel>
+    <SidebarGroup>
+      
       <SidebarMenu>
-        {projects.map((item) => (
-          <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton asChild>
-              <Link href={item.url}>
-                {"icon" in item && item.icon ? (
-                  <item.icon />
-                ) : (
-                  <span aria-hidden="true" className="text-base leading-none">
-                    {item.emoji}
-                  </span>
-                )}
-                <span>{item.name}</span>
-              </Link>
-            </SidebarMenuButton>
-            {/* ... dropdown menu content remains the same */}
-          </SidebarMenuItem>
-        ))}
+        {projects.map((item) => {
+          const isActive = item.url === pathname;
+          return (
+            <SidebarMenuItem key={item.name}>
+              <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                <Link href={item.url}>
+                  {"icon" in item && item.icon ? (
+                    <item.icon />
+                  ) : (
+                    <span aria-hidden="true" className="text-base leading-none">
+                      {item.emoji}
+                    </span>
+                  )}
+                  <span>{item.name}</span>
+                </Link>
+              </SidebarMenuButton>
+              {/* ... dropdown menu content remains the same */}
+            </SidebarMenuItem>
+          )
+        })}
         <SidebarMenuItem>
-          <SidebarMenuButton>
+          <SidebarMenuButton tooltip="More Projects">
             <MoreHorizontal />
             <span>More</span>
           </SidebarMenuButton>

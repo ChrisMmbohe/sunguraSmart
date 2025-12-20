@@ -1,6 +1,8 @@
 "use client";
 
 import { ChevronRight, type LucideIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 import {
   Collapsible,
@@ -11,7 +13,6 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -48,52 +49,73 @@ export function NavMain({
 }: {
   menu?: MenuItem[]
 }) {
+  const pathname = usePathname();
+
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Menu</SidebarGroupLabel>
+      
       <SidebarMenu>
-        {menu.map((item) => (
-          <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title}>
-                <a href={item.url}>
-                  {"icon" in item && item.icon ? (
-                    <item.icon />
-                  ) : (
-                    <span aria-hidden="true" className="text-base leading-none">
-                      {(item as EmojiMenuItem).emoji}
-                    </span>
-                  )}
-                  <span>{item.title}</span>
-                </a>
-              </SidebarMenuButton>
-
-              {item.menu?.length ? (
-                <>
+        {menu.map((item) => {
+          const isActive = item.url === pathname;
+          const isCollapsible = item.items?.length;          
+          // Open collapsible if any sub-item is active
+          const isCurrentPathInSubMenu = isCollapsible && (pathname === item.url || pathname.startsWith(item.url + '/'));
+          return (
+            <Collapsible key={item.title} open={isCurrentPathInSubMenu} defaultOpen={isCurrentPathInSubMenu}> 
+              <SidebarMenuItem>
+                
+                {isCollapsible ? (
+                  // Case 1: Item has sub-menu. The Button must act as the CollapsibleTrigger.
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuAction className="data-[state=open]:rotate-90">
-                      <ChevronRight />
-                      <span className="sr-only">Toggle</span>
-                    </SidebarMenuAction>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                      <div className="flex w-full items-center">
+                        {"icon" in item && item.icon ? (
+                          <item.icon />
+                        ) : (
+                          <span aria-hidden="true" className="text-base leading-none">
+                            {(item as EmojiMenuItem).emoji}
+                          </span>
+                        )}
+                        <span>{item.title}</span>
+                        {/* Chevron is now inside the button and rotates with CollapsibleTrigger state */}
+                        <ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]:rotate-90" />
+                      </div>
+                    </SidebarMenuButton>
                   </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {item.items?.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild>
-                            <a href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </a>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </>
-              ) : null}
-            </SidebarMenuItem>
-          </Collapsible>
-        ))}
+                ) : (
+                  // Case 2: Direct link.
+                  <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                    <Link href={item.url}>
+                      {"icon" in item && item.icon ? (
+                        <item.icon />
+                      ) : (
+                        <span aria-hidden="true" className="text-base leading-none">
+                          {(item as EmojiMenuItem).emoji}
+                        </span>
+                      )}
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+                
+                <CollapsibleContent>
+                  <SidebarMenuSub>
+                    {item.items?.map((subItem) => (
+                      <SidebarMenuSubItem key={subItem.title}>
+                        <SidebarMenuSubButton asChild isActive={subItem.url === pathname}>
+                          <Link href={subItem.url}>
+                            <span>{subItem.title}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+
+              </SidebarMenuItem>
+            </Collapsible>
+          )
+        })}
       </SidebarMenu>
     </SidebarGroup>
   )

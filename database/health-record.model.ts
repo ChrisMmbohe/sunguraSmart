@@ -1,147 +1,54 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+// Import the new model interface
+import { IHealthRecord, IRabbit, RabbitStatus, IHealthRecordModel } from './types';
 
-export interface IHealthRecord extends Document {
-  rabbit_id: mongoose.Types.ObjectId;
-  record_date: Date;
-  disease_id: mongoose.Types.ObjectId | null;
-  issue: string;
-  treatment: string | null;
-  medication: string | null;
-  veterinarian: string | null;
-  notes: string | null;
-  user_id: string | null;
-  is_repeat: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
+const HealthRecordSchema = new Schema<IHealthRecord>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    rabbit_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', required: true, index: true },
+    disease_id: { type: Schema.Types.ObjectId, ref: 'Disease', required: true },
+    date_of_diagnosis: { type: Date, required: true },
+    treatment_start_date: { type: Date, required: true },
+    treatment_end_date: { type: Date, default: null }, // Null if ongoing
+    quarantined: { type: Boolean, default: false },
+    notes: { type: String, default: null },
+}, { timestamps: true });
 
-interface IHealthRecordModel extends Model<IHealthRecord> {
-  getSickCount(userId: string): Promise<number>;
-}
+/**
+ * Static method to count the number of unique rabbits with active (ongoing) health records.
+ * @param userId The ID of the user whose records to check.
+ * @returns The count of unique sick/quarantined rabbits.
+ */
+HealthRecordSchema.statics.getSickCount = async function(userId: string): Promise<number> {
+    // Aggregation pipeline to find unique rabbits with an active health record.
+    const uniqueSickRabbits = await this.aggregate([
+        // 1. Filter by user and where the treatment has not ended (treatment_end_date is null)
+        { $match: { user_id: userId, treatment_end_date: null } },
+        // 2. Group by rabbit_id to get only unique sick rabbits
+        { $group: { _id: '$rabbit_id' } },
+        // 3. Count the number of unique rabbits
+        { $count: 'sickCount' }
+    ]);
 
-const healthRecordSchema = new Schema<IHealthRecord, IHealthRecordModel>(
-  {
-    rabbit_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      required: true,
-    },
-    record_date: {
-      type: Date,
-      required: true,
-    },
-    disease_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Disease',
-      default: null,
-    },
-    issue: {
-      type: String,
-      required: true,
-    },
-    treatment: {
-      type: String,
-      default: null,
-    },
-    medication: {
-      type: String,
-      default: null,
-    },
-    veterinarian: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-    user_id: {
-      type: String,
-      default: null,
-    },
-    is_repeat: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
-
-// Pre-save: Detect repeat issues and validate rabbit is active
-healthRecordSchema.pre('save', async function (next) {
-  try {
-    this.record_date = new Date(this.record_date.setUTCHours(0, 0, 0, 0));
-
-    // Validate rabbit exists and is active
-    const Rabbit = mongoose.model('Rabbit');
-    const rabbit = await Rabbit.findById(this.rabbit_id);
-    if (!rabbit) throw new Error('Rabbit not found');
-    if (rabbit.status !== 'Active') {
-      throw new Error('Cannot add health record for non-active rabbit');
-    }
-
-    // Check for similar prior health records for repeat detection
-    // Escape regex special characters for safe pattern matching
-    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\    if (this.isNew) {
-      const HealthRecord = mongoose.model('HealthRecord');
-      const priorRecord = await HealthRecord.findOne({
-        rabbit_id: this.rabbit_id,
-        issue: new RegExp(this.issue, 'i'),
-        _id: { $ne: this._id },
-      }).sort({ record_date: -1 });
-
-      if (priorRecord) {
-        this.is_repeat = true;
-      }
-    }
-');
-
-    // Check for similar prior health records for repeat detection
-    if (this.isNew) {
-      const HealthRecord = mongoose.model('HealthRecord');
-      const priorRecord = await HealthRecord.findOne({
-        rabbit_id: this.rabbit_id,
-        issue: new RegExp(escapeRegex(this.issue), 'i'),
-        _id: { $ne: this._id },
-      }).sort({ record_date: -1 });
-
-      if (priorRecord) {
-        this.is_repeat = true;
-      }
-    }
-    next();
-  } catch (error) {
-    next(error as Error);
-  }
-});
-
-// Static: Get count of sick rabbits for population dashboard
-healthRecordSchema.statics.getSickCount = async function (userId: string): Promise<number> {
-  const filter = userId ? { user_id: userId } : {};
-
-  // Get unique rabbits with health records in the last 30 days (considered 'sick')
-  const result = await this.aggregate([
-    {
-      $match: {
-        ...filter,
-        record_date: { $gte: new Date(Date.now() - 30 * 86400000) },
-      },
-    },
-    { $group: { _id: '$rabbit_id' } },
-    { $count: 'sick_count' },
-  ]);
-
-  return result[0]?.sick_count || 0;
+    // The result is an array [{ sickCount: X }] or empty if no results
+    return uniqueSickRabbits.length > 0 ? uniqueSickRabbits[0].sickCount : 0;
 };
 
-// Indexes
-healthRecordSchema.index({ rabbit_id: 1, record_date: -1 });
 
-healthRecordSchema.set('toJSON', { virtuals: true });
-healthRecordSchema.set('toObject', { virtuals: true });
+// Post-Save Middleware to update Rabbit status to Sick/Quarantined
+HealthRecordSchema.post('save', async function(doc) {
+    if (mongoose.models.Rabbit) {
+        const RabbitModel = mongoose.model<IRabbit>('Rabbit');
 
-const HealthRecord = (mongoose.models.HealthRecord as IHealthRecordModel) || mongoose.model<IHealthRecord, IHealthRecordModel>('HealthRecord', healthRecordSchema);
+        // Only set status if the health record is current (no end date)
+        if (!doc.treatment_end_date) {
+            const status: RabbitStatus = doc.quarantined ? 'Quarantined' : 'Sick';
+            await RabbitModel.findByIdAndUpdate(doc.rabbit_id, { status: status });
+        } else {
+             // If treatment ended, the status should be reset by application logic, 
+             // but we rely on the Rabbit pre-save hook to re-evaluate growth status.
+        }
+    }
+});
 
-export default HealthRecord;
+// Use the IHealthRecordModel interface for the exported model
+export const HealthRecord = (mongoose.models.HealthRecord || mongoose.model<IHealthRecord, IHealthRecordModel>('HealthRecord', HealthRecordSchema)) as IHealthRecordModel;
