@@ -1,90 +1,23 @@
-// database/cage.model.ts
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import Rabbit from '@/database/rabbit.model'; // We'll create this soon
+import mongoose, { Schema, Model } from 'mongoose';
+import { ICage } from './types';
 
-export interface ICage extends Document {
-  cage_id: string;
-  capacity: number;
-  location: string | null;
-  notes: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  // Virtuals
-  occupancy: number;        // ← number of rabbits currently in this cage
-  available_slots: number;  // ← capacity - occupancy
-  is_full: boolean;
-}
-
-interface ICageModel extends Model<ICage> {
-  // Optional static methods later
-}
-
-const cageSchema = new Schema<ICage, ICageModel>(
-  {
-    cage_id: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      uppercase: true, // Standardize format
+const CageSchema = new Schema<ICage>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    // A1-A12, B1-B12, C1-C12 etc.
+    name: { type: String, required: true, trim: true, unique: true }, 
+    // Tier A, Tier B, Quarantine Section
+    location_area: { type: String, required: true, trim: true }, 
+    capacity: { type: Number, required: true, min: 1, default: 1 },
+    current_occupants: [{ type: Schema.Types.ObjectId, ref: 'Rabbit', default: [] }],
+    cage_type: { 
+        type: String, 
+        enum: ['Buck', 'Doe', 'Grower', 'Quarantine', 'Nesting'], 
+        required: true, 
+        index: true 
     },
-    capacity: {
-      type: Number,
-      default: 1,
-      min: [1, 'Capacity must be at least 1'],
-    },
-    location: {
-      type: String,
-      default: null,
-      trim: true,
-    },
-    notes: {
-      type: String,
-      default: null,
-      trim: true,
-    },
-  },
-  {
-    timestamps: true,
-    // Ensure virtuals are serialized even when not explicitly populated
-    toJSON: { virtuals: true }, 
-    toObject: { virtuals: true },
-  }
-);
+}, { timestamps: true });
 
-// ──────────────────────────────────────────────────────
-// Virtuals for Occupancy, Slots, and Full Status
-// ──────────────────────────────────────────────────────
+// Index for distribution queries
+CageSchema.index({ user_id: 1, cage_type: 1 });
 
-/**
- * ⚠️ CRITICAL NOTE:
- * These virtuals (occupancy, available_slots, is_full) depend on Virtual Populate.
- * They will ONLY contain correct values if the query explicitly uses:
- * .populate('occupancy')
- * Failure to populate 'occupancy' will cause available_slots and is_full
- * to rely on a null/undefined occupancy, leading to incorrect calculations.
- */
-cageSchema.virtual('occupancy', {
-  ref: 'Rabbit',
-  localField: '_id',
-  foreignField: 'cage_id',
-  count: true, // Returns count instead of documents
-});
-
-cageSchema.virtual('available_slots').get(function () {
-  // occupancy will be 0 if unpopulated or if there are no rabbits
-  return this.capacity - (this.occupancy || 0);
-});
-
-cageSchema.virtual('is_full').get(function () {
-  // occupancy will be 0 if unpopulated or if there are no rabbits
-  return (this.occupancy || 0) >= this.capacity;
-});
-
-// Indexes
-//cageSchema.index({ cage_id: 1 });
-
-const Cage = (mongoose.models.Cage as ICageModel) ||
-  mongoose.model<ICage, ICageModel>('Cage', cageSchema);
-
-export default Cage;
+export const Cage = (mongoose.models.Cage || mongoose.model<ICage>('Cage', CageSchema)) as Model<ICage>;

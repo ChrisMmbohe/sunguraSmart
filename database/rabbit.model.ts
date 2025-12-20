@@ -1,317 +1,164 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema} from 'mongoose';
+import { IRabbit, IBreed, RabbitStatus, IRabbitModel, IRabbitStats } from './types';
 
-type Gender = 'Male' | 'Female';
-type AcquisitionType = 'born' | 'purchased' | 'gift' | 'other' | null;
-// Updated Status type to include 'Quarantined'
-type Status = 'Active' | 'Sold' | 'Deceased' | 'Culled' | 'Quarantined';
-type MaturityStatus = 'Kit' | 'Junior' | 'Adult' | 'Senior';
-
-export interface IRabbit extends Document {
-  tag_id: string;
-  name: string | null;
-  breed_id: mongoose.Types.ObjectId | null;
-  gender: Gender;
-  date_of_birth: Date | null;
-  acquisition_date: Date | null;
-  acquisition_type: AcquisitionType;
-  source_farm: string | null;
-  cage_id: mongoose.Types.ObjectId | null;
-  photo: string | null;
-  color: string | null;
-  category: string | null;
-  notes: string | null;
-  sire_id: mongoose.Types.ObjectId | null;
-  dam_id: mongoose.Types.ObjectId | null;
-  user_id: string | null;
-  status: Status;
-  is_pregnant: boolean;
-  is_quarantined: boolean; // New field for quarantine status
-  last_breeding_date: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  // Virtuals
-  age_in_days: number;
-  maturity_status: MaturityStatus;
-  full_name: string;
-}
-
-// Define the structure for the aggregated dashboard statistics
-export interface RabbitStats {
-  total: number;
-  male: number;
-  female: number;
-  active: number;
-  deceased: number;
-  sold: number;
-  culled: number;
-  sick: number; // Placeholder, usually populated via HealthRecord aggregation
-  pregnant: number;
-  quarantined: number; // New quarantine count
-  mature: number;
-  by_breed: { _id: mongoose.Types.ObjectId | null; name: string; count: number }[];
-}
-
-export interface IRabbitModel extends Model<IRabbit> {
-  getStats(userId: string): Promise<RabbitStats>;
-}
-
-const rabbitSchema = new Schema<IRabbit, IRabbitModel>(
-  {
-    tag_id: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-    name: {
-      type: String,
-      default: null,
-      trim: true,
-    },
-    breed_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Breed',
-      default: null,
-    },
-    gender: {
-      type: String,
-      enum: ['Male', 'Female'],
-      required: true,
-    },
-    date_of_birth: {
-      type: Date,
-      default: null,
-    },
-    acquisition_date: {
-      type: Date,
-      default: Date.now,
-    },
-    acquisition_type: {
-      type: String,
-      enum: ['born', 'purchased', 'gift', 'other', null],
-      default: 'purchased',
-    },
-    source_farm: {
-      type: String,
-      default: null,
-    },
-    cage_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Cage',
-      default: null,
-    },
-    photo: {
-      type: String,
-      default: null,
-    },
-    color: {
-      type: String,
-      default: null,
-    },
-    category: {
-      type: String,
-      default: null,
-    },
-    notes: {
-      type: String,
-      default: null,
-    },
-    sire_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      default: null,
-    },
-    dam_id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Rabbit',
-      default: null,
-    },
-    user_id: {
-      type: String,
-      required: true, // Must be linked to a Clerk user
-    },
+const RabbitSchema = new Schema<IRabbit>({
+    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    // Scalable Identifier: Application layer enforces pattern like D-DOEID-SEQ or YYYYMM-SEQ
+    ear_tag_id: { type: String, required: true, unique: true, trim: true }, 
+    name: { type: String, default: null, trim: true },
+    gender: { type: String, enum: ['Male', 'Female'], required: true, index: true },
+    date_of_birth: { type: Date, required: true },
+    breed_id: { type: Schema.Types.ObjectId, ref: 'Breed', required: true },
+    current_cage_id: { type: Schema.Types.ObjectId, ref: 'Cage', index: true, required: true },
     status: {
-      type: String,
-      enum: ['Active', 'Sold', 'Deceased', 'Culled', 'Quarantined'], // Added Quarantined
-      default: 'Active',
+        type: String,
+        enum: ['Kit', 'Weaner', 'Grower', 'Active', 'Sick', 'Quarantined', 'Culled', 'Deceased', 'Sold'],
+        default: 'Kit',
+        index: true
     },
-    is_pregnant: {
-      type: Boolean,
-      default: false,
-    },
-    is_quarantined: { // New field
-      type: Boolean,
-      default: false,
-    },
-    last_breeding_date: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
-);
+    // SOURCE OF RABBITS fields
+    source_type: { type: String, enum: ['Born', 'Purchased', 'Gifted'], required: true, default: 'Born' },
+    source_farm: { type: String, default: null }, // Seller or Gifting Farm
+    parent_doe_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
+    parent_buck_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
+    // ✅ FIX: Added the field/virtual for pregnancy status
+    is_pregnant: { type: Boolean, default: false },
+}, { timestamps: true, toJSON: { virtuals: true } });
 
-// ──────────────────────────────────────────────────────
-// PRE-SAVE HOOK
-// ──────────────────────────────────────────────────────
-rabbitSchema.pre('save', function (next) {
-  // If the rabbit is being sold/culled/deceased, clear pregnancy/quarantine flags
-  if (['Sold', 'Deceased', 'Culled'].includes(this.status) && this.isModified('status')) {
-    this.is_pregnant = false;
-    this.is_quarantined = false;
-  }
+// Virtual for Age calculation
+RabbitSchema.virtual('age_in_days').get(function() {
+    if (!this.date_of_birth) return 0;
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - this.date_of_birth.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+});
 
-  // Set default name if none is provided
-  if (this.isNew && !this.name) {
-    this.name = this.tag_id;
-  }
-  
-  // ──────────────────────────────────────────────────────
-  // CRITICAL QUARANTINE LOGIC
-  // ──────────────────────────────────────────────────────
-  
-  // 1. Prevent quarantine on final statuses
-  const finalStatuses: Status[] = ['Sold', 'Deceased', 'Culled'];
-  if (this.is_quarantined && finalStatuses.includes(this.status)) {
-    return next(new Error('Cannot quarantine a rabbit with a final status (Sold/Deceased/Culled)'));
-  }
-  
-  // 2. Sync status with quarantine flag (only for 'Active' state)
-  if (this.isModified('is_quarantined')) {
-    if (this.is_quarantined && this.status === 'Active') {
-      // Transition from Active to Quarantined
-      this.status = 'Quarantined';
-    } else if (!this.is_quarantined && this.status === 'Quarantined') {
-      // Transition from Quarantined back to Active
-      this.status = 'Active';
+// Virtual for Full Name (e.g., A1-123 - Bunny)
+RabbitSchema.virtual('full_name').get(function() {
+    // If a name exists, return Tag ID - Name, otherwise just the Tag ID
+    if (this.name) {
+        return `${this.ear_tag_id} - ${this.name}`;
     }
-    // If is_quarantined is set to true when status is already 'Quarantined', no change
-    // If is_quarantined is set to false when status is 'Active', no change
-  }
-  
-  // 3. Sync quarantine flag with status
-  if (this.isModified('status')) {
-    if (this.status === 'Quarantined' && !this.is_quarantined) {
-      // Status was manually set to 'Quarantined', sync flag
-      this.is_quarantined = true;
-    } else if (this.status === 'Active' && this.is_quarantined) {
-      // Status was manually set to 'Active', sync flag
-      this.is_quarantined = false;
+    return this.ear_tag_id;
+});
+
+// Virtual for Maturity Status
+RabbitSchema.virtual('maturity_status').get(function() {
+    // This virtual simply reflects the status derived from age, which is calculated in the pre('save') hook.
+    switch (this.status) {
+        case 'Kit':
+        case 'Weaner':
+            return 'Immature';
+        case 'Grower':
+            return 'Growing';
+        case 'Active':
+            return 'Mature';
+        default:
+            return 'N/A';
     }
-  }
-
-  // ──────────────────────────────────────────────────────
-  // End Quarantine Logic
-  // ──────────────────────────────────────────────────────
-
-  next();
 });
 
-// ──────────────────────────────────────────────────────
-// VIRTUALS
-// ──────────────────────────────────────────────────────
-
-// Full Name Virtual
-rabbitSchema.virtual('full_name').get(function () {
-  return this.name || this.tag_id;
-});
-
-// Age Virtual
-rabbitSchema.virtual('age_in_days').get(function () {
-  if (!this.date_of_birth) return 0;
-  // Calculate age in days
-  const diffTime = Math.abs(Date.now() - this.date_of_birth.getTime());
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
-});
-
-// Maturity Status Virtual
-rabbitSchema.virtual('maturity_status').get(function (this: IRabbit) {
-  const age = this.age_in_days;
-
-  if (age <= 0) return 'Kit'; // Default for no DOB
-  if (age < 56) return 'Kit'; // ~8 weeks
-  if (age < 112) return 'Junior'; // ~16 weeks (4 months)
-  // If the rabbit is older than 4 months
-  if (age < 182) return 'Adult'; // ~6 months
-  return 'Senior'; // > 6 months
-});
-
-// ──────────────────────────────────────────────────────
-// STATICS (getStats)
-// ──────────────────────────────────────────────────────
 
 /**
- * Calculates key statistics for a user's rabbitry.
+ * Static method to fetch key statistics for the rabbit dashboard.
+ * Counts rabbits that are NOT marked as terminal (Culled, Deceased, Sold).
+ * @param userId The ID of the user whose rabbits to query.
+ * @returns An object containing total, active, buck, and doe counts.
  */
-rabbitSchema.statics.getStats = async function (userId: string): Promise<RabbitStats> {
-  const filter = { user_id: userId };
+RabbitSchema.statics.getStats = async function(userId: string): Promise<IRabbitStats> {
+    const nonTerminalStatuses: RabbitStatus[] = ['Kit', 'Weaner', 'Grower', 'Active', 'Sick', 'Quarantined'];
+    
+    // Base filter for all non-terminal rabbits belonging to the user
+    const baseFilter = {
+        user_id: userId,
+        status: { $in: nonTerminalStatuses }
+    };
 
-  // Run all aggregations concurrently
-  const [counts, breedCounts] = await Promise.all([
-    this.aggregate([
-      { $match: filter },
-      {
-        $facet: {
-          total: [{ $count: 'count' }],
-          by_gender: [{ $group: { _id: '$gender', count: { $count: {} } } }],
-          by_status: [{ $group: { _id: '$status', count: { $count: {} } } }],
-          pregnant: [{ $match: { is_pregnant: true } }, { $count: 'count' }],
-          quarantined: [{ $match: { is_quarantined: true } }, { $count: 'count' }], // New stat
-          // Calculate 'mature' based on a minimum age (e.g., 112 days or ~4 months)
-          mature: [{ $match: { date_of_birth: { $lte: new Date(Date.now() - 112 * 24 * 60 * 60 * 1000) } } }, { $count: 'count' }],
-        }
-      },
-    ]),
-    // Separate aggregation to handle $lookup for breed names
-    this.aggregate([
-      { $match: filter },
-      // Exclude Quarantined rabbits from 'Active' count calculation (optional, as status handles this)
-      { $match: { status: { $ne: 'Quarantined' } } }, 
-      { $group: { _id: '$breed_id', count: { $count: {} } } },
-      { $lookup: { from: 'breeds', localField: '_id', foreignField: '_id', as: 'breed_data' } },
-      { $unwind: { path: '$breed_data', preserveNullAndEmptyArrays: true } },
-      { $project: { _id: 1, count: 1, name: { $ifNull: ['$breed_data.name', 'Unknown'] } } },
-      { $sort: { count: -1, name: 1 } },
-      { $project: { _id: 1, count: 1, name: { $ifNull: ['$breed_data.name', 'Unknown'] } } },
-    ]),
-  ]);
+    try {
+        // 1. Total Rabbits (Non-terminal)
+        const total = await this.countDocuments(baseFilter);
 
-  const result = counts[0];
-  const genderMap = new Map(result.by_gender.map((g: { _id: string; count: number }) => [g._id, g.count]));
-  const statusMap = new Map(result.by_status.map((s: { _id: string; count: number }) => [s._id, s.count]));
+        // 2. Active Rabbits (Mature, non-terminal)
+        const active = await this.countDocuments({
+            ...baseFilter,
+            status: 'Active'
+        });
 
-  return {
-    total: result.total[0]?.count || 0,
-    male: genderMap.get('Male') || 0,
-    female: genderMap.get('Female') || 0,
-    // Active status now correctly excludes Quarantined rabbits via the model's enum rules,
-    // so we can rely on the status map here.
-    active: statusMap.get('Active') || 0,
-    deceased: statusMap.get('Deceased') || 0,
-    sold: statusMap.get('Sold') || 0,
-    culled: statusMap.get('Culled') || 0,
-    sick: 0, // Placeholder, usually populated via HealthRecord aggregation
-    pregnant: result.pregnant[0]?.count || 0,
-    quarantined: result.quarantined[0]?.count || 0, // Populate the new stat
-    mature: result.mature[0]?.count || 0,
-    by_breed: breedCounts,
-  };
+        // 3. Bucks (Non-terminal)
+        const bucks = await this.countDocuments({
+            ...baseFilter,
+            gender: 'Male'
+        });
+
+        // 4. Does (Non-terminal)
+        const does = await this.countDocuments({
+            ...baseFilter,
+            gender: 'Female'
+        });
+
+        return {
+            total,
+            active,
+            bucks,
+            does
+        };
+    } catch (error) {
+        console.error("Error fetching rabbit statistics:", error);
+        // Return zeros on error to prevent API from crashing
+        return { total: 0, active: 0, bucks: 0, does: 0 };
+    }
 };
 
-// Indexes for query optimization
-rabbitSchema.index({ user_id: 1, status: 1, gender: 1 });
-rabbitSchema.index({ breed_id: 1 });
-rabbitSchema.index({ cage_id: 1 });
 
-// Redundant virtual configuration removed here:
-// rabbitSchema.set('toJSON', { virtuals: true });
-// rabbitSchema.set('toObject', { virtuals: true });
+// Pre-Save Middleware for Automatic Status Update (Growth Stages)
+RabbitSchema.pre('save', async function(next) {
+    const doc = this as IRabbit & mongoose.Document;
 
-const Rabbit = (mongoose.models.Rabbit as IRabbitModel) ||
-  mongoose.model<IRabbit, IRabbitModel>('Rabbit', rabbitSchema);
+    // Terminal or Override statuses skip growth calculation
+    const terminalOrOverrideStatuses: RabbitStatus[] = ['Sick', 'Quarantined', 'Culled', 'Deceased', 'Sold'];
 
-export default Rabbit;
+    if (doc.isModified('date_of_birth') || doc.isNew || !terminalOrOverrideStatuses.includes(doc.status)) {
+        const ageDays = doc.age_in_days;
+
+        // Fetch breed growth stages (Business Rule)
+        const breedStages = { maturity: 150, weaning: 30, grower: 60 };
+        try {
+            if (doc.breed_id && mongoose.models.Breed) {
+                const breed = await mongoose.model<IBreed>('Breed').findById(doc.breed_id).select('maturity_age_days weaning_age_days grower_age_days').lean();
+                if (breed) {
+                    breedStages.maturity = breed.maturity_age_days;
+                    breedStages.weaning = breed.weaning_age_days;
+                    breedStages.grower = breed.grower_age_days;
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching breed for status update:", error);
+        }
+
+        let newStatus: RabbitStatus = 'Kit'; // Default
+
+        if (ageDays >= breedStages.maturity) {
+            newStatus = 'Active'; // Mature rabbit
+        } else if (ageDays >= breedStages.grower) {
+            newStatus = 'Grower'; // 60 days up to maturity
+        } else if (ageDays >= breedStages.weaning) {
+            newStatus = 'Weaner'; // 30-59 days
+        } else {
+            newStatus = 'Kit'; // 0-29 days
+        }
+        
+        // Only update the status if the current status is a growth stage, 
+        // ensuring 'Sick' or 'Quarantined' status is maintained until cleared.
+        if (['Kit', 'Weaner', 'Grower', 'Active'].includes(doc.status) || doc.isNew) {
+             doc.status = newStatus;
+        }
+    }
+
+    next();
+});
+
+RabbitSchema.index({ user_id: 1, status: 1 });
+RabbitSchema.index({ user_id: 1, ear_tag_id: 1 });
+
+// Cast the model to the extended interface IRabbitModel
+export const Rabbit = (mongoose.models.Rabbit || mongoose.model<IRabbit, IRabbitModel>('Rabbit', RabbitSchema)) as IRabbitModel;

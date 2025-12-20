@@ -1,7 +1,7 @@
 // lib/data-fetcher.ts
 
 import connectDB from '@/lib/mongodb';
-import RabbitModel from '@/database/rabbit.model';
+import { Rabbit as RabbitModel } from '@/database/rabbit.model'; // ✅ Fix: Use named import 'Rabbit' and rename it to 'RabbitModel'
 import { RabbitTableData } from '@/app/rabbits/types';
 import { IBreed, ICage } from '@/database/index';
 import mongoose from 'mongoose';
@@ -19,14 +19,14 @@ export async function getRabbitsForTable(): Promise<RabbitTableData[]> {
     // The select and lean methods optimize the query performance.
     // const rabbits = await RabbitModel.find({ status: { $ne: 'Sold' } }) // Exclude 'Sold' for a cleaner view
     const rabbits = await RabbitModel.find({})
-      .select('tag_id name gender date_of_birth status is_pregnant breed_id cage_id')
-      .populate<{ breed_id: IBreed }>('breed_id', 'name') // Populate breed_id with only the 'name' field
-      .populate<{ cage_id: ICage }>('cage_id', 'cage_id') // Populate cage_id with only the 'cage_id' field
-      // ✅ FIX: Combined the two .sort() calls into one. 
-      // Sorts primarily by date_of_birth (oldest first), then secondarily by createdAt (newest first).
-      .sort({ date_of_birth: 1, createdAt: -1 }) 
-      .lean() // Return plain JavaScript objects for performance
-      .exec();
+  // 1. Select the correct field name: `current_cage_id`
+  .select('ear_tag_id name gender date_of_birth status is_pregnant breed_id current_cage_id')
+  .populate<{ breed_id: IBreed }>('breed_id', 'name')
+  // 2. Populate the correct path (`current_cage_id`) and select the correct field (`name`) from the Cage model.
+  .populate<{ current_cage_id: ICage }>('current_cage_id', 'name') 
+  .sort({ date_of_birth: 1, createdAt: -1 })
+  .lean()
+  .exec();
       
     // 3. Transform data using Mongoose virtuals
     const transformedData: RabbitTableData[] = rabbits.map(rabbit => {
@@ -38,11 +38,13 @@ export async function getRabbitsForTable(): Promise<RabbitTableData[]> {
 
       // Extract populated field names (checking if they were actually populated)
       const breedName = (rabbit.breed_id as IBreed)?.name ?? 'Unknown';
-      const cageId = (rabbit.cage_id as ICage)?.cage_id ?? 'N/A';
+      // 3. Extract the populated value from the correct path and property name
+      const cageName = (rabbit.current_cage_id as ICage)?.name ?? 'N/A';
       
       return {
         _id: rabbit._id.toString(),
-        tag_id: rabbit.tag_id,
+        // FIX: Change 'tag_id' to 'ear_tag_id' to access the correct property from the database result
+        tag_id: rabbit.ear_tag_id,
         // Virtuals
         full_name: rabbitDoc.full_name,
         age_in_days: rabbitDoc.age_in_days,
@@ -53,7 +55,8 @@ export async function getRabbitsForTable(): Promise<RabbitTableData[]> {
         is_pregnant: rabbit.is_pregnant,
         // Populated fields
         breed_name: breedName,
-        cage_id: cageId,
+        // The table output field is called `cage_id`
+        cage_id: cageName,
       };
     });
 
