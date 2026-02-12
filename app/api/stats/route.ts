@@ -1,6 +1,6 @@
-import { currentUser } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
+import { currentUser } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import connectDB from "@/lib/mongodb";
 import {
   Breeding,
   Litter,
@@ -10,7 +10,7 @@ import {
   FeedLog,
   Cage,
   Expense,
-} from '@/database/index';
+} from "@/database/index";
 
 /**
  * @route GET /api/stats
@@ -21,60 +21,96 @@ export async function GET() {
   try {
     const user = await currentUser();
     if (!user) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response("Unauthorized", { status: 401 });
     }
     const userId = user.id;
 
     await connectDB();
 
     // ===== POPULATION DATA =====
-    const rabbitStats = await (Rabbit as any).getStats(userId);
+    // We update the fetching logic to actually count Quarantined and Active rabbits
+    const [total, active, quarantined, sick, kit] = await Promise.all([
+      Rabbit.countDocuments({
+        user_id: userId,
+        status: { $nin: ["Culled", "Deceased", "Sold"] },
+      }),
+      Rabbit.countDocuments({ user_id: userId, status: "Active" }),
+      Rabbit.countDocuments({ user_id: userId, status: "Quarantined" }),
+      Rabbit.countDocuments({ user_id: userId, status: "Sick" }),
+      Rabbit.countDocuments({ user_id: userId, status: "Kit" }),
+    ]);
+
     const populationStats = {
-      total: rabbitStats.total || 0,
-      active: rabbitStats.active || 0,
-      quarantined: 0 // Not tracked separately in current schema
+      total,
+      active,
+      quarantined,
+      sick,
+      kit,
     };
-    
+
     // ===== BREEDING DATA =====
-    const breedingSuccess = await (Breeding as any).getBreedingSuccess(userId);
-    
     // Date ranges for queries
     const thisMonth = new Date();
     thisMonth.setDate(1);
     thisMonth.setHours(0, 0, 0, 0);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
-    
-    // Average litter size and active litters - only from current month
-    const litterStats = await Litter.aggregate([
-      { $match: { user_id: userId, kindling_date: { $gte: thisMonth } } },
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 86400000);
+
+    // Calculate kindling rate from breedings in last 60 days
+    const breedingStats = await Breeding.aggregate([
+      {
+        $match: {
+          user_id: userId,
+          mating_date: { $gte: sixtyDaysAgo },
+        },
+      },
       {
         $group: {
           _id: null,
-          avg_size: { $avg: '$total_kits_born' },
+          total_breedings: { $sum: 1 },
+          successful_breedings: {
+            $sum: { $cond: [{ $eq: ["$is_successful", true] }, 1, 0] },
+          },
+        },
+      },
+    ]);
+
+    const totalBreedings = breedingStats[0]?.total_breedings || 0;
+    const successfulBreedings = breedingStats[0]?.successful_breedings || 0;
+    const kindlingRatePct =
+      totalBreedings > 0 ? (successfulBreedings / totalBreedings) * 100 : 0;
+
+    // Average litter size and active litters - last 60 days
+
+    const litterStats = await Litter.aggregate([
+      { $match: { user_id: userId, kindling_date: { $gte: sixtyDaysAgo } } },
+      {
+        $group: {
+          _id: null,
+          avg_size: { $avg: "$total_kits_born" },
           active_count: {
             $sum: {
-              $cond: [{ $eq: ['$status', 'Active'] }, 1, 0]
-            }
+              $cond: [{ $eq: ["$status", "Active"] }, 1, 0],
+            },
           },
-          total_born: { $sum: '$total_kits_born' },
-          weaned_count: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'Weaned'] }, 1, 0]
-            }
-          }
-        }
-      }
+          total_litters: { $sum: 1 },
+          total_born: { $sum: "$total_kits_born" },
+          total_surviving: { $sum: "$kits_surviving" }, // Use kits_surviving for accurate survival rate
+          weaned_litters: {
+            $sum: { $cond: [{ $eq: ["$status", "Weaned"] }, 1, 0] },
+          },
+        },
+      },
     ]);
-    
+
     const avgLitterSize = litterStats[0]?.avg_size || 0;
     const activeLitters = litterStats[0]?.active_count || 0;
-    const kitsBornThisMonth = litterStats[0]?.total_born || 0;
-    const weanedKits = litterStats[0]?.weaned_count || 0;
-    
+    const kitsBorn = litterStats[0]?.total_born || 0;
+    const kitsSurviving = litterStats[0]?.total_surviving || 0;
+
     // Calculate weaning survival rate
-    const weaningSurvivalRate = kitsBornThisMonth > 0 
-      ? (weanedKits / kitsBornThisMonth) * 100 
-      : 0;
+    const weaningSurvivalRate =
+      kitsBorn > 0 ? (kitsSurviving / kitsBorn) * 100 : 0;
 
     // ===== FINANCIAL DATA =====
 
@@ -83,15 +119,15 @@ export async function GET() {
       {
         $match: {
           user_id: userId,
-          sale_date: { $gte: thisMonth }
-        }
+          sale_date: { $gte: thisMonth },
+        },
       },
       {
         $group: {
           _id: null,
-          total: { $sum: '$price_usd' }
-        }
-      }
+          total: { $sum: "$price_usd" },
+        },
+      },
     ]);
     const monthlyIncome = revenueData[0]?.total || 0;
 
@@ -100,31 +136,31 @@ export async function GET() {
       {
         $match: {
           user_id: userId,
-          transaction_date: { $gte: thisMonth }
-        }
+          transaction_date: { $gte: thisMonth },
+        },
       },
       {
         $group: {
           _id: null,
-          total: { $sum: '$amount_usd' }
-        }
-      }
+          total: { $sum: "$amount_usd" },
+        },
+      },
     ]);
     const monthlyExpenses = expenseData[0]?.total || 0;
     const profit = monthlyIncome - monthlyExpenses;
 
     // ===== HEALTH DATA =====
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sickCount = await (HealthRecord as any).getSickCount(userId);
-    
+
     // Mortality rate (last 30 days)
     const deaths = await Rabbit.countDocuments({
       user_id: userId,
-      status: 'Deceased',
-      updatedAt: { $gte: thirtyDaysAgo }
+      status: "Deceased",
+      updatedAt: { $gte: thirtyDaysAgo },
     });
-    const mortalityRate = populationStats.total > 0 
-      ? (deaths / populationStats.total) * 100 
-      : 0;
+    const mortalityRate =
+      populationStats.total > 0 ? (deaths / populationStats.total) * 100 : 0;
 
     // ===== FEED DATA =====
     const feedEfficiency = await FeedLog.aggregate([
@@ -132,15 +168,16 @@ export async function GET() {
       {
         $group: {
           _id: null,
-          total_used: { $sum: '$quantity_used' },
-          avg_rabbits: { $avg: '$rabbits_covered' }
-        }
-      }
+          total_used: { $sum: "$quantity_used" },
+          avg_rabbits: { $avg: "$rabbits_covered" },
+        },
+      },
     ]);
-    
-    const efficiencyRatio = feedEfficiency[0]?.total_used && feedEfficiency[0]?.avg_rabbits
-      ? feedEfficiency[0].total_used / feedEfficiency[0].avg_rabbits
-      : 0;
+
+    const efficiencyRatio =
+      feedEfficiency[0]?.total_used && feedEfficiency[0]?.avg_rabbits
+        ? feedEfficiency[0].total_used / feedEfficiency[0].avg_rabbits
+        : 0;
 
     // ===== CAGE DATA =====
     const cageStats = await Cage.aggregate([
@@ -148,54 +185,54 @@ export async function GET() {
       {
         $group: {
           _id: null,
-          total_capacity: { $sum: '$capacity' },
+          total_capacity: { $sum: "$capacity" },
           total_occupants: {
-            $sum: { $size: { $ifNull: ['$current_occupants', []] } }
-          }
-        }
-      }
+            $sum: { $size: { $ifNull: ["$current_occupants", []] } },
+          },
+        },
+      },
     ]);
 
     const totalCapacity = cageStats[0]?.total_capacity || 0;
     const totalOccupants = cageStats[0]?.total_occupants || 0;
-    const occupancyPct = totalCapacity > 0 
-      ? (totalOccupants / totalCapacity) * 100 
-      : 0;
+    const occupancyPct =
+      totalCapacity > 0 ? (totalOccupants / totalCapacity) * 100 : 0;
     const availableSlots = Math.max(0, totalCapacity - totalOccupants);
 
     return NextResponse.json({
       population: {
         total: populationStats.total,
         active: populationStats.active,
-        quarantined: populationStats.quarantined
+        quarantined: populationStats.quarantined,
+        kit: activeLitters > 0 ? kitsBorn : populationStats.kit, // Fallback logic
       },
       breeding: {
-        kindling_rate_pct: breedingSuccess.kindling_rate_pct || 0,
+        kindling_rate_pct: kindlingRatePct || 0,
         weaning_survival_rate_pct: weaningSurvivalRate || 0,
         avg_litter_size: avgLitterSize || 0,
         active_litters: activeLitters || 0,
-        kits_born_this_month: kitsBornThisMonth || 0
+        kits_born_this_month: kitsBorn || 0,
       },
       financial: {
         income: monthlyIncome || 0,
-        profit: profit || 0
+        profit: profit || 0,
       },
       health: {
         sick: sickCount || 0,
-        mortality_rate_pct: mortalityRate || 0
+        mortality_rate_pct: mortalityRate || 0,
       },
       feed: {
-        efficiency_ratio: efficiencyRatio || 0
+        efficiency_ratio: efficiencyRatio || 0,
       },
       cages: {
         occupancy_pct: occupancyPct || 0,
-        available_slots: availableSlots || 0
-      }
+        available_slots: availableSlots || 0,
+      },
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    console.error("Error fetching dashboard stats:", error);
     return NextResponse.json(
-      { message: 'Internal Server Error', error: (error as Error).message },
+      { message: "Internal Server Error", error: (error as Error).message },
       { status: 500 }
     );
   }

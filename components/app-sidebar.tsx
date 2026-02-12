@@ -40,6 +40,12 @@ const data = {
 
         },
         {
+            title: "Breeding",
+            url: "/breeding",
+            emoji: "🔗",
+
+        },
+        {
             title: "Litters",
             url: "/litters",
             emoji: "🐾",

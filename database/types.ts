@@ -80,7 +80,9 @@ export interface ILitter extends IBaseDocument {
     buck_id: Types.ObjectId;
     total_kits_born: number;
     kits_surviving: number;
+    current_kits_count: number; // Current count of surviving kits (updated as they age/are sold)
     weaning_date: Date | null;
+    status: 'Active' | 'Weaned' | 'Closed'; // Active: nursing, Weaned: weaning started, Closed: litter complete
     litter_weight_logs: Types.DocumentArray<ILitterWeightLog>; // Monitoring up to weaning stage
 }
 

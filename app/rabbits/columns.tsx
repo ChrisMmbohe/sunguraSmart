@@ -5,7 +5,7 @@
 import { ColumnDef } from '@tanstack/react-table';
 import { RabbitStatus, RabbitTableData } from './types';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpDown, Rabbit as RabbitIcon } from 'lucide-react';
+import { ArrowUpDown, Rabbit as RabbitIcon, AlertTriangle, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceStrict } from 'date-fns';
 
@@ -18,6 +18,9 @@ const getStatusVariant = (status: RabbitStatus): 'default' | 'secondary' | 'outl
       return 'secondary';
     case 'Deceased':
     case 'Culled':
+      return 'destructive';
+    case 'Sick':
+    case 'Quarantined':
       return 'destructive';
     default:
       return 'outline';
@@ -90,14 +93,23 @@ export const columns: ColumnDef<RabbitTableData>[] = [
     accessorKey: 'cage_id',
     header: 'Cage',
   },
-  // 7. Status (Badge)
+  // 7. Status (Badge) - Enhanced with Health Icons
   {
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => {
       const status: RabbitStatus = row.getValue('status');
+      const isHealthIssue = status === 'Sick' || status === 'Quarantined';
+      
       return (
-        <Badge variant={getStatusVariant(status)} className="capitalize">
+        <Badge 
+          variant={getStatusVariant(status)} 
+          className={`capitalize flex items-center gap-1 w-fit ${
+            isHealthIssue ? 'animate-pulse' : ''
+          }`}
+        >
+          {status === 'Quarantined' && <AlertTriangle className="h-3 w-3" />}
+          {status === 'Sick' && <Activity className="h-3 w-3" />}
           {status}
           {status === 'Active' && row.original.is_pregnant && (
             <span className="ml-1">🤰</span>

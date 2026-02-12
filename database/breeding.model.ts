@@ -1,9 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
-import { IBreeding, IBreedingModel, IBreedingSuccessStats } from './types'; // Updated imports
+import { IBreeding, IBreedingModel, IBreedingSuccessStats } from './types';
 
-// Using the custom model interface IBreedingModel for the Schema definition
 const BreedingSchema = new Schema<IBreeding, IBreedingModel>({ 
-    user_id: { type: String, required: true, index: true }, // FIXED: Changed from Schema.Types.ObjectId to String
+    user_id: { type: String, required: true, index: true },
     doe_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', required: true, index: true },
     buck_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', required: true },
     mating_date: { type: Date, required: true },
@@ -12,8 +11,8 @@ const BreedingSchema = new Schema<IBreeding, IBreedingModel>({
     litter_id: { type: Schema.Types.ObjectId, ref: 'Litter', default: null, index: true },
 }, { timestamps: true });
 
+// --- Automation: Calculate Expected Kindling Date ---
 BreedingSchema.pre('validate', function(next) {
-    // Automation: Calculate expected kindling date (Average gestation is ~31 days)
     if (this.mating_date && !this.expected_kindling_date) {
         const expected = new Date(this.mating_date);
         expected.setDate(expected.getDate() + 31);
@@ -22,32 +21,77 @@ BreedingSchema.pre('validate', function(next) {
     next();
 });
 
-// --- STATIC METHOD: Calculate Breeding Success Rate ---
-BreedingSchema.statics.getBreedingSuccess = async function(
-    userId: string // FIXED: Type is now strictly string
-): Promise<IBreedingSuccessStats> {
-    
-    // The query now works correctly by matching the string userId to the String schema type.
-    // 1. Count total breeding attempts for the user
+/**
+ * --- AUTOMATION: Create Litter on Success ---
+ * This post-save middleware ensures that if a breeding is marked successful,
+ * a placeholder litter is created if one doesn't exist.
+ */
+BreedingSchema.post('save', async function(doc) {
+    if (doc.is_successful && !doc.litter_id) {
+        try {
+            const Litter = mongoose.model('Litter');
+            
+            // Create a default litter record linked to this breeding
+            const newLitter = await Litter.create({
+                user_id: doc.user_id,
+                breeding_id: doc._id,
+                kindling_date: doc.expected_kindling_date, // Default to expected date
+                doe_id: doc.doe_id,
+                buck_id: doc.buck_id,
+                total_kits_born: 0, // To be updated by user later
+                kits_surviving: 0,
+                status: 'Active'
+            });
+
+            // Update the breeding record with the new litter_id (using findOneAndUpdate to avoid re-triggering middleware loop)
+            await mongoose.model('Breeding').findOneAndUpdate(
+                { _id: doc._id },
+                { $set: { litter_id: newLitter._id } }
+            );
+        } catch (error) {
+            console.error('Failed to auto-create litter:', error);
+        }
+    }
+});
+
+// --- Statics: KPI Calculations ---
+BreedingSchema.statics.getSuccessStats = async function(userId: string): Promise<IBreedingSuccessStats> {
     const totalBreedingAttempts = await this.countDocuments({ user_id: userId });
-    
-    // 2. Count breedings that resulted in a successful kindling (is_successful: true)
     const successfulKindlings = await this.countDocuments({ user_id: userId, is_successful: true });
 
     let kindlingRatePct = 0;
     if (totalBreedingAttempts > 0) {
-        // Calculate the percentage
         kindlingRatePct = (successfulKindlings / totalBreedingAttempts) * 100;
+    }
+
+    const litterStats = await mongoose.model('Litter').aggregate([
+        { $match: { user_id: userId } },
+        { 
+            $group: {
+                _id: null,
+                totalKitsBorn: { $sum: "$total_kits_born" },
+                totalKitsSurviving: { $sum: "$kits_surviving" },
+                avgLitterSize: { $avg: "$total_kits_born" }
+            }
+        }
+    ]);
+
+    let weaningSurvivalRatePct = 0;
+    let avgLitterSize = 0;
+
+    if (litterStats.length > 0) {
+        const stats = litterStats[0];
+        avgLitterSize = stats.avgLitterSize || 0;
+        if (stats.totalKitsBorn > 0) {
+            weaningSurvivalRatePct = (stats.totalKitsSurviving / stats.totalKitsBorn) * 100;
+        }
     }
 
     return { 
         kindling_rate_pct: kindlingRatePct,
-        total_attempts: totalBreedingAttempts,
-        successful_kindlings: successfulKindlings
+        weaning_survival_rate_pct: weaningSurvivalRatePct,
+        avg_litter_size: avgLitterSize
     };
 };
 
-// Export the model, casting it to the IBreedingModel interface
-export const Breeding = (
-    mongoose.models.Breeding || mongoose.model<IBreeding, IBreedingModel>('Breeding', BreedingSchema)
-) as IBreedingModel;
+export const Breeding = mongoose.models.Breeding || mongoose.model<IBreeding, IBreedingModel>('Breeding', BreedingSchema);

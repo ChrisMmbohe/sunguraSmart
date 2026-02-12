@@ -15,7 +15,9 @@ const LitterSchema = new Schema<ILitter>({
     buck_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', required: true },
     total_kits_born: { type: Number, required: true, min: 0 },
     kits_surviving: { type: Number, required: true, min: 0 },
+    current_kits_count: { type: Number, required: true, min: 0, default: function() { return this.kits_surviving; } },
     weaning_date: { type: Date, default: null },
+    status: { type: String, enum: ['Active', 'Weaned', 'Closed'], default: 'Active' },
     // Allow monitoring of litter weight monitoring up to weaning stage
     litter_weight_logs: { type: [LitterWeightLogSchema], default: [] }, 
 }, { timestamps: true });
