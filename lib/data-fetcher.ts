@@ -8,6 +8,7 @@ import { Breeding as BreedingModel } from '@/database/breeding.model';
 import { Litter as LitterModel } from '@/database/litter.model';
 import { HealthRecord as HealthRecordModel } from '@/database/health-record.model';
 import { Disease as DiseaseModel } from '@/database/disease.model';
+import { Schedule as ScheduleModel } from '@/database/schedule.model';
 import { RabbitTableData } from '@/app/rabbits/types';
 import { BreedingTableData } from '@/app/breeding/types';
 import { LitterTableData } from '@/app/litters/types';
@@ -28,18 +29,19 @@ export interface ICageOption {
 }
 
 /**
- * Fetches all Rabbit data, populates related fields, and transforms it
+ * Fetches all Rabbit data for a specific user, populates related fields, and transforms it
  * into the structure required for the data table.
+ * @param userId - The ID of the user whose rabbits to fetch
  */
-export async function getRabbitsForTable(): Promise<RabbitTableData[]> {
+export async function getRabbitsForTable(userId: string): Promise<RabbitTableData[]> {
   try {
     // 1. Connect to the database
     await connectDB();
 
-    // 2. Fetch Rabbits with necessary population
+    // 2. Fetch Rabbits with necessary population, filtered by user_id
     // The select and lean methods optimize the query performance.
     // const rabbits = await RabbitModel.find({ status: { $ne: 'Sold' } }) // Exclude 'Sold' for a cleaner view
-    const rabbits = await RabbitModel.find({})
+    const rabbits = await RabbitModel.find({ user_id: userId })
   // 1. Select the correct field name: `current_cage_id`
   .select('ear_tag_id name gender date_of_birth status is_pregnant breed_id current_cage_id')
   .populate<{ breed_id: IBreed }>('breed_id', 'name')
@@ -91,13 +93,14 @@ export async function getRabbitsForTable(): Promise<RabbitTableData[]> {
 }
 
 /**
- * Fetches all available breeds for dropdown/form selection
+ * Fetches all available breeds for a specific user for dropdown/form selection
+ * @param userId - The ID of the user whose breeds to fetch
  */
-export async function getBreedsForForm(): Promise<IBreedOption[]> {
+export async function getBreedsForForm(userId: string): Promise<IBreedOption[]> {
   try {
     await connectDB();
 
-    const breeds = await BreedModel.find({})
+    const breeds = await BreedModel.find({ user_id: userId })
       .select('_id name')
       .sort({ name: 1 })
       .lean()
@@ -114,13 +117,14 @@ export async function getBreedsForForm(): Promise<IBreedOption[]> {
 }
 
 /**
- * Fetches all available cages for dropdown/form selection
+ * Fetches all available cages for a specific user for dropdown/form selection
+ * @param userId - The ID of the user whose cages to fetch
  */
-export async function getCagesForForm(): Promise<ICageOption[]> {
+export async function getCagesForForm(userId: string): Promise<ICageOption[]> {
   try {
     await connectDB();
 
-    const cages = await CageModel.find({})
+    const cages = await CageModel.find({ user_id: userId })
       .select('_id name cage_type')
       .sort({ name: 1 })
       .lean()
@@ -138,14 +142,15 @@ export async function getCagesForForm(): Promise<ICageOption[]> {
 }
 
 /**
- * Fetches all Breeding data, populates related rabbit information, and transforms it
+ * Fetches all Breeding data for a specific user, populates related rabbit information, and transforms it
  * into the structure required for the breeding data table.
+ * @param userId - The ID of the user whose breedings to fetch
  */
-export async function getBreedingsForTable(): Promise<BreedingTableData[]> {
+export async function getBreedingsForTable(userId: string): Promise<BreedingTableData[]> {
   try {
     await connectDB();
 
-    const breedings = await BreedingModel.find({})
+    const breedings = await BreedingModel.find({ user_id: userId })
       .select('doe_id buck_id mating_date expected_kindling_date is_successful litter_id')
       .populate('doe_id', 'ear_tag_id name')
       .populate('buck_id', 'ear_tag_id name')
@@ -179,13 +184,14 @@ export async function getBreedingsForTable(): Promise<BreedingTableData[]> {
 }
 
 /**
- * Fetches all available rabbits for dropdown/form selection (for breeding, litters, etc.)
+ * Fetches all available rabbits for a specific user for dropdown/form selection (for breeding, litters, etc.)
+ * @param userId - The ID of the user whose rabbits to fetch
  */
-export async function getRabbitsForForm(): Promise<IRabbitOption[]> {
+export async function getRabbitsForForm(userId: string): Promise<IRabbitOption[]> {
   try {
     await connectDB();
 
-    const rabbits = await RabbitModel.find({})
+    const rabbits = await RabbitModel.find({ user_id: userId })
       .select('_id ear_tag_id name gender')
       .sort({ ear_tag_id: 1 })
       .lean()
@@ -212,13 +218,14 @@ export interface IRabbitOption {
 }
 
 /**
- * Fetches all breedings for dropdown/form selection (for litter management)
+ * Fetches all breedings for a specific user for dropdown/form selection (for litter management)
+ * @param userId - The ID of the user whose breedings to fetch
  */
-export async function getBreedingsForForm(): Promise<IBreedingOption[]> {
+export async function getBreedingsForForm(userId: string): Promise<IBreedingOption[]> {
   try {
     await connectDB();
 
-    const breedings = await BreedingModel.find({})
+    const breedings = await BreedingModel.find({ user_id: userId })
       .select('_id doe_id buck_id mating_date')
       .populate('doe_id', 'ear_tag_id name')
       .populate('buck_id', 'ear_tag_id name')
@@ -246,11 +253,11 @@ export interface IBreedingOption {
   mating_date: Date;
 }
 
-export async function getLittersForTable(): Promise<LitterTableData[]> {
+export async function getLittersForTable(userId: string): Promise<LitterTableData[]> {
   try {
     await connectDB();
 
-    const litters = await LitterModel.find({})
+    const litters = await LitterModel.find({ user_id: userId })
       .select('breeding_id doe_id buck_id kindling_date total_kits_born kits_surviving current_kits_count weaning_date status')
       .populate('doe_id', 'ear_tag_id name')
       .populate('buck_id', 'ear_tag_id name')
@@ -290,14 +297,15 @@ export async function getLittersForTable(): Promise<LitterTableData[]> {
 }
 
 /**
- * Fetches all Health Records, populates rabbit and disease information,
+ * Fetches all Health Records for a specific user, populates rabbit and disease information,
  * and transforms it into the structure required for the health data table.
+ * @param userId - The ID of the user whose health records to fetch
  */
-export async function getHealthRecordsForTable(): Promise<HealthRecordTableData[]> {
+export async function getHealthRecordsForTable(userId: string): Promise<HealthRecordTableData[]> {
   try {
     await connectDB();
 
-    const healthRecords = await HealthRecordModel.find({})
+    const healthRecords = await HealthRecordModel.find({ user_id: userId })
       .select('rabbit_id disease_id date_of_diagnosis treatment_start_date treatment_end_date quarantined notes')
       .populate<{ rabbit_id: IRabbit }>('rabbit_id', 'ear_tag_id name')
       .populate<{ disease_id: IDisease }>('disease_id', 'name')
@@ -360,13 +368,14 @@ export async function getHealthRecordsForTable(): Promise<HealthRecordTableData[
 }
 
 /**
- * Fetches all available diseases for dropdown/form selection
+ * Fetches all available diseases for a specific user for dropdown/form selection
+ * @param userId - The ID of the user whose diseases to fetch
  */
-export async function getDiseasesForForm() {
+export async function getDiseasesForForm(userId: string) {
   try {
     await connectDB();
 
-    const diseases = await DiseaseModel.find({})
+    const diseases = await DiseaseModel.find({ user_id: userId })
       .select('_id name is_quarantinable')
       .sort({ name: 1 })
       .lean()
@@ -384,14 +393,16 @@ export async function getDiseasesForForm() {
 }
 
 /**
- * Fetches health statistics for the health dashboard
+ * Fetches health statistics for a specific user for the health dashboard
+ * @param userId - The ID of the user whose health stats to fetch
  */
-export async function getHealthStats() {
+export async function getHealthStats(userId: string) {
   try {
     await connectDB();
 
     // Get currently sick/quarantined rabbits (active health records)
     const activeSickRecords = await HealthRecordModel.find({
+      user_id: userId,
       treatment_end_date: null
     })
       .select('rabbit_id quarantined')
@@ -412,5 +423,283 @@ export async function getHealthStats() {
   } catch (error) {
     console.error('Failed to fetch health stats:', error);
     throw new Error('Failed to fetch health stats');
+  }
+}
+
+/**
+ * Validate if an ear_tag_id is unique for a given user
+ * Useful for form-level validation and API requests
+ */
+export async function isEarTagIdUnique(userId: string, earTagId: string, excludeId?: string): Promise<boolean> {
+  try {
+    await connectDB();
+
+    const query: Record<string, unknown> = {
+      user_id: userId,
+      ear_tag_id: earTagId,
+    };
+
+    if (excludeId) {
+      query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+    }
+
+    const existing = await RabbitModel.findOne(query).select('_id').lean();
+    return !existing;
+  } catch (error) {
+    console.error('Failed to check ear tag uniqueness:', error);
+    return false;
+  }
+}
+
+/**
+ * Get rabbit by ID with fully populated references
+ * Used for detail views and API responses
+ */
+export async function getRabbitById(userId: string, rabbitId: string) {
+  try {
+    await connectDB();
+
+    if (!mongoose.Types.ObjectId.isValid(rabbitId)) {
+      return null;
+    }
+
+    const rabbit = await RabbitModel.findOne({
+      _id: new mongoose.Types.ObjectId(rabbitId),
+      user_id: userId,
+    })
+      .select(
+        'ear_tag_id name gender date_of_birth status is_pregnant breed_id current_cage_id parent_doe_id parent_buck_id source_type source_farm createdAt updatedAt'
+      )
+      .populate('breed_id', 'name')
+      .populate('current_cage_id', 'name cage_type')
+      .populate('parent_doe_id', 'ear_tag_id name')
+      .populate('parent_buck_id', 'ear_tag_id name')
+      .lean();
+
+    return rabbit;
+  } catch (error) {
+    console.error('Failed to fetch rabbit by ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Get rabbit statistics for a user
+ * Used for dashboard and API responses
+ */
+export async function getRabbitStats(userId: string) {
+  try {
+    await connectDB();
+
+    const stats = await RabbitModel.getStats(userId);
+    return stats;
+  } catch (error) {
+    console.error('Failed to fetch rabbit stats:', error);
+    return {
+      total: 0,
+      active: 0,
+      bucks: 0,
+      does: 0,
+    };
+  }
+}
+
+/**
+ * Get rabbits available for breeding (active, opposite gender, not pregnant)
+ * Useful for breeding form selection
+ */
+export async function getBreedingRabbits(userId: string, gender: 'Male' | 'Female') {
+  try {
+    await connectDB();
+
+    const oppositeGender = gender === 'Male' ? 'Female' : 'Male';
+
+    const rabbits = await RabbitModel.find({
+      user_id: userId,
+      gender: oppositeGender,
+      status: 'Active',
+      is_pregnant: gender === 'Female' ? false : undefined,
+    })
+      .select('ear_tag_id name gender')
+      .populate('breed_id', 'name')
+      .sort({ ear_tag_id: 1 })
+      .lean();
+
+    return rabbits.map(r => ({
+      _id: r._id.toString(),
+      label: r.name ? `${r.ear_tag_id} - ${r.name}` : r.ear_tag_id,
+      value: r._id.toString(),
+    }));
+  } catch (error) {
+    console.error('Failed to fetch breeding rabbits:', error);
+    return [];
+  }
+}
+
+/**
+ * Search rabbits by ear_tag_id or name
+ * Used for autocomplete and search functionality
+ */
+export async function searchRabbits(userId: string, searchTerm: string, limit: number = 10) {
+  try {
+    await connectDB();
+
+    const trimmedTerm = searchTerm.trim();
+    if (trimmedTerm.length < 2) {
+      return [];
+    }
+
+    const rabbits = await RabbitModel.find({
+      user_id: userId,
+      $or: [
+        { ear_tag_id: { $regex: trimmedTerm, $options: 'i' } },
+        { name: { $regex: trimmedTerm, $options: 'i' } },
+      ],
+    })
+      .select('ear_tag_id name gender status breed_id')
+      .populate('breed_id', 'name')
+      .limit(limit)
+      .lean();
+
+    return rabbits.map(r => ({
+      _id: r._id.toString(),
+      label: r.name ? `${r.ear_tag_id} - ${r.name}` : r.ear_tag_id,
+      value: r._id.toString(),
+      gender: r.gender,
+      status: r.status,
+    }));
+  } catch (error) {
+    console.error('Failed to search rabbits:', error);
+    return [];
+  }
+}
+
+/**
+ * Count rabbits by status for a user
+ * Used for dashboard metrics
+ */
+export async function getRabbitCountByStatus(userId: string) {
+  try {
+    await connectDB();
+
+    const statusCounts = await RabbitModel.aggregate([
+      { $match: { user_id: userId } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    return Object.fromEntries(statusCounts.map(item => [item._id, item.count]));
+  } catch (error) {
+    console.error('Failed to fetch status counts:', error);
+    return {};
+  }
+}
+
+/**
+ * Check if rabbit is involved in active breedings
+ * Used for deletion and status change validations
+ */
+export async function hasActiveBreedings(rabbitId: string): Promise<boolean> {
+  try {
+    await connectDB();
+
+    const objectId = new mongoose.Types.ObjectId(rabbitId);
+    const count = await BreedingModel.countDocuments({
+      $or: [{ buck_id: objectId }, { doe_id: objectId }],
+      status: { $ne: 'Failed' },
+    });
+
+    return count > 0;
+  } catch (error) {
+    console.error('Failed to check active breedings:', error);
+    return false;
+  }
+}
+
+/**
+ * Fetches available (unused) ear tag IDs from the system for a specific user.
+ * In a real system, these would be pre-created tags.
+ * For now, returns placeholder tags that aren't yet assigned to rabbits in the user's account.
+ * @param userId - The ID of the user whose ear tag IDs to check
+ */
+export async function getAvailableEarTagIds(userId: string): Promise<{ id: string; label: string }[]> {
+  try {
+    await connectDB();
+
+    // Get all assigned ear_tag_ids for this user
+    const assignedTags = await RabbitModel.find({ user_id: userId })
+      .select('ear_tag_id')
+      .lean()
+      .exec();
+
+    const assignedSet = new Set(assignedTags.map(r => r.ear_tag_id));
+
+    // Generate common ear tag ID patterns based on cage structure
+    // Assuming pattern: A-001, A-002, ... A-010, B-001, etc.
+    const allPossibleTags: string[] = [];
+    const cages = ['A', 'B', 'C', 'D', 'E']; // Common cage sections
+    const numbersPerCage = 20; // 20 rabbits per cage section
+
+    for (const cage of cages) {
+      for (let i = 1; i <= numbersPerCage; i++) {
+        const tagId = `${cage}-${String(i).padStart(3, '0')}`;
+        if (!assignedSet.has(tagId)) {
+          allPossibleTags.push(tagId);
+        }
+      }
+    }
+
+    // Return available tags formatted for select dropdown
+    return allPossibleTags.map(tag => ({
+      id: tag,
+      label: tag,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch available ear tag IDs:', error);
+    // Return empty array on error
+    return [];
+  }
+}
+
+/**
+ * Fetches all schedules for a specific user with proper population of related data
+ * @param userId - The ID of the user whose schedules to fetch
+ */
+export async function getSchedulesForTable(userId: string) {
+  try {
+    await connectDB();
+
+    const schedules = await ScheduleModel.find({ user_id: userId })
+      .select('target_date type description is_completed related_rabbit_ids related_entity_id createdAt')
+      .populate('related_rabbit_ids', 'ear_tag_id name')
+      .sort({ target_date: 1, is_completed: 1 })
+      .lean()
+      .exec();
+
+    // Transform data for table display
+    const transformedData = schedules.map((schedule: any) => ({
+      _id: schedule._id.toString(),
+      target_date: schedule.target_date,
+      type: schedule.type,
+      description: schedule.description,
+      is_completed: schedule.is_completed,
+      related_rabbit_ids: schedule.related_rabbit_ids?.map((r: any) => ({
+        _id: r._id.toString(),
+        ear_tag_id: r.ear_tag_id,
+        name: r.name,
+      })) || [],
+      related_entity_id: schedule.related_entity_id,
+      createdAt: schedule.createdAt,
+    }));
+
+    return transformedData;
+  } catch (error) {
+    console.error('Failed to fetch schedules for table:', error);
+    throw new Error('Database fetch failed');
   }
 }

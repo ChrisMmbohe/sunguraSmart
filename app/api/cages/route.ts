@@ -1,163 +1,323 @@
-import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Cage from "@/database/cage.model";
+import { NextRequest } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import connectDB from '@/lib/mongodb';
+import { Cage as CageModel } from '@/database/cage.model';
+import {
+  CreateCageSchema,
+  UpdateCageSchema,
+  CageQuerySchema,
+} from '@/lib/validations/cage';
+import {
+  handleApiError,
+  createSuccessResponse,
+  createErrorResponse,
+  ApiErrorCodes,
+  ApiError,
+} from '@/lib/api-error-handler';
+import mongoose from 'mongoose';
 
 /**
- * POST: Create a new cage
+ * GET /api/cages
+ * Fetch all cages with pagination, filtering, and sorting
  */
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
     await connectDB();
 
-    const body = await req.json();
-
-    // Ensure capacity is parsed correctly if it exists, defaulting to 1
-    let { cage_id, capacity: capacityRaw = 1, location = null, notes = null } = body;
-
-    // Attempt to convert capacity to an integer, if it was sent as a string (common for JSON payloads)
-    const capacity = typeof capacityRaw === 'string' ? parseInt(capacityRaw, 10) : capacityRaw;
-
-    if (!cage_id || typeof cage_id !== "string" || cage_id.trim() === "") {
-      return NextResponse.json(
-        { message: "cage_id is required and must be a non-empty string" },
-        { status: 400 }
-      );
-    }
-
-    // Apply the suggested change to check for integer type first
-    if (!Number.isInteger(capacity) || capacity < 1) {
-      return NextResponse.json(
-        { message: "capacity must be an integer ≥ 1" },
-        { status: 400 }
-      );
-    }
-
-    const newCage = await Cage.create({
-      cage_id: cage_id.trim().toUpperCase(),
-      capacity,
-      location: location?.trim() || null,
-      notes: notes?.trim() || null,
+    // Parse and validate query parameters
+    const searchParams = req.nextUrl.searchParams;
+    const queryData = CageQuerySchema.parse({
+      page: searchParams.get('page') || '1',
+      limit: searchParams.get('limit') || '20',
+      cage_type: searchParams.get('cage_type') || undefined,
+      search: searchParams.get('search') || undefined,
+      sortBy: searchParams.get('sortBy') || 'name',
+      sortOrder: searchParams.get('sortOrder') || 'asc',
     });
 
-    return NextResponse.json(
-      {
-        message: "Cage created successfully",
-        // Assuming toObject({ virtuals: true }) is necessary for model output
-        cage: newCage.toObject({ virtuals: true }), 
-      },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error("Cage creation error:", error);
+    // Build filter
+    const filter: Record<string, any> = { user_id: userId };
 
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { message: `Cage with ID "${error.keyValue?.cage_id}" already exists` },
-        { status: 409 }
-      );
+    if (queryData.cage_type) {
+      filter.cage_type = queryData.cage_type;
     }
 
-    return NextResponse.json(
-      { message: "Failed to create cage", error: error?.message || "Unknown error" },
-      { status: 500 }
-    );
+    if (queryData.search) {
+      filter.$or = [
+        { name: { $regex: queryData.search, $options: 'i' } },
+        { location_area: { $regex: queryData.search, $options: 'i' } },
+      ];
+    }
+
+    // Build sort
+    const sort: Record<string, 1 | -1> = {};
+    sort[queryData.sortBy] = queryData.sortOrder === 'asc' ? 1 : -1;
+
+    // Calculate pagination
+    const page = queryData.page;
+    const limit = queryData.limit;
+    const skip = (page - 1) * limit;
+
+    // Execute queries in parallel
+    const [cages, total] = await Promise.all([
+      CageModel.find(filter)
+        .select('name location_area capacity cage_type current_occupants')
+        .populate('current_occupants', 'ear_tag_id name')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      CageModel.countDocuments(filter),
+    ]);
+
+    // Transform data for response
+    const transformedCages = cages.map((cage: any) => ({
+      _id: cage._id.toString(),
+      name: cage.name,
+      location_area: cage.location_area,
+      capacity: cage.capacity,
+      cage_type: cage.cage_type,
+      current_occupants: cage.current_occupants?.map((r: any) => ({
+        _id: r._id.toString(),
+        ear_tag_id: r.ear_tag_id,
+        name: r.name,
+      })) || [],
+      occupancy: cage.current_occupants?.length || 0,
+      available_slots: cage.capacity - (cage.current_occupants?.length || 0),
+    }));
+
+    return createSuccessResponse({
+      data: transformedCages,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 /**
- * GET: Fetch cages with powerful filtering
- *
- * Supported query parameters:
- * ?location=barn              → case-insensitive partial match
- * ?available=true             → only cages with available_slots > 0
- * ?full=true                  → only completely full cages
- * ?occupancy_gt=2             → occupancy > 2
- * ?occupancy_gte=3            → occupancy ≥ 3
- * ?occupancy_lt=5             → occupancy < 5
- * ?occupancy_lte=4            → occupancy ≤ 4
- * ?occupancy=6                → exact occupancy
+ * POST /api/cages
+ * Create a new cage
  */
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
     await connectDB();
 
-    const { searchParams } = new URL(req.url);
+    // Parse request body
+    const body = await req.json();
 
-    // Basic MongoDB filter (only for stored fields)
-    const filter: any = {};
+    // Validate request
+    const validatedData = CreateCageSchema.parse(body);
 
-    const location = searchParams.get("location");
-    if (location) {
-      // Escape special characters in the regex query
-      const escapedLocation = location.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-      filter.location = new RegExp(escapedLocation, "i");
-    }
-    
-    // Fetch all matching cages and populate occupancy count (assuming a virtual property/populate setup)
-    const cageDocs = await Cage.find(filter)
-      .sort({ cage_id: 1 })
-      .populate("occupancy") // ← adds occupancy count
-      .exec();
+    // Check for duplicate cage name for this user
+    const existingCage = await CageModel.findOne({
+      user_id: userId,
+      name: validatedData.name,
+    });
 
-    // Convert to plain objects with ALL virtuals (available_slots, is_full, etc.)
-    let cages = cageDocs.map((doc) => doc.toObject({ virtuals: true }));
-
-    // Post-processing filters (for virtuals)
-    const available = searchParams.get("available");
-    const full = searchParams.get("full");
-
-    const occExact = searchParams.get("occupancy");
-    const occGt = searchParams.get("occupancy_gt");
-    const occGte = searchParams.get("occupancy_gte");
-    const occLt = searchParams.get("occupancy_lt");
-    const occLte = searchParams.get("occupancy_lte");
-
-    if (available === "true") {
-      cages = cages.filter((c) => c.available_slots > 0);
+    if (existingCage) {
+      throw new ApiError(
+        409,
+        ApiErrorCodes.DUPLICATE_ENTRY,
+        'A cage with this name already exists'
+      );
     }
 
-    if (full === "true") {
-      cages = cages.filter((c) => c.is_full === true);
-    }
+    // Create cage
+    const cage = new CageModel({
+      user_id: userId,
+      ...validatedData,
+      current_occupants: [],
+    });
 
-    if (occExact !== null) {
-      const val = parseInt(occExact, 10);
-      if (!isNaN(val)) cages = cages.filter((c) => (c.occupancy || 0) === val);
-    }
+    await cage.save();
 
-    if (occGt !== null) {
-      const val = parseInt(occGt, 10);
-      if (!isNaN(val)) cages = cages.filter((c) => (c.occupancy || 0) > val);
-    }
-
-    if (occGte !== null) {
-      const val = parseInt(occGte, 10);
-      if (!isNaN(val)) cages = cages.filter((c) => (c.occupancy || 0) >= val);
-    }
-
-    if (occLt !== null) {
-      const val = parseInt(occLt, 10);
-      if (!isNaN(val)) cages = cages.filter((c) => (c.occupancy || 0) < val);
-    }
-
-    if (occLte !== null) {
-      const val = parseInt(occLte, 10);
-      if (!isNaN(val)) cages = cages.filter((c) => (c.occupancy || 0) <= val);
-    }
-
-    return NextResponse.json(
+    return createSuccessResponse(
       {
-        message: "Cages fetched successfully",
-        count: cages.length,
-        cages,
+        _id: cage._id.toString(),
+        name: cage.name,
+        location_area: cage.location_area,
+        capacity: cage.capacity,
+        cage_type: cage.cage_type,
+        current_occupants: [],
+        occupancy: 0,
+        available_slots: cage.capacity,
+        message: 'Cage created successfully',
       },
-      { status: 200 }
+      201
     );
-  } catch (error: any) {
-    console.error("Fetch cages error:", error);
-    return NextResponse.json(
-      { message: "Failed to fetch cages", error: error?.message || "Unknown error" },
-      { status: 500 }
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * PUT /api/cages/[id]
+ * Update an existing cage
+ */
+export async function PUT(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
+    await connectDB();
+
+    // Extract cage ID from URL
+    const url = new URL(req.url);
+    const cageId = url.pathname.split('/').pop();
+
+    if (!cageId || !mongoose.Types.ObjectId.isValid(cageId)) {
+      throw new ApiError(
+        400,
+        ApiErrorCodes.BAD_REQUEST,
+        'Invalid cage ID'
+      );
+    }
+
+    // Parse request body
+    const body = await req.json();
+
+    // Validate request
+    const validatedData = UpdateCageSchema.parse(body);
+
+    // Find cage and verify ownership
+    const cage = await CageModel.findOne({
+      _id: new mongoose.Types.ObjectId(cageId),
+      user_id: userId,
+    });
+
+    if (!cage) {
+      throw new ApiError(
+        404,
+        ApiErrorCodes.NOT_FOUND,
+        'Cage not found'
+      );
+    }
+
+    // Check for duplicate cage name if updating it
+    if (validatedData.name && validatedData.name !== cage.name) {
+      const existingCage = await CageModel.findOne({
+        user_id: userId,
+        name: validatedData.name,
+        _id: { $ne: cage._id },
+      });
+
+      if (existingCage) {
+        throw new ApiError(
+          409,
+          ApiErrorCodes.DUPLICATE_ENTRY,
+          'A cage with this name already exists'
+        );
+      }
+    }
+
+    // Update cage
+    Object.assign(cage, validatedData);
+    await cage.save();
+
+    // Populate and return
+    const populatedCage = await cage.populate('current_occupants', 'ear_tag_id name');
+
+    return createSuccessResponse({
+      _id: populatedCage._id.toString(),
+      name: populatedCage.name,
+      location_area: populatedCage.location_area,
+      capacity: populatedCage.capacity,
+      cage_type: populatedCage.cage_type,
+      current_occupants: populatedCage.current_occupants?.map((r: any) => ({
+        _id: r._id.toString(),
+        ear_tag_id: r.ear_tag_id,
+        name: r.name,
+      })) || [],
+      occupancy: populatedCage.current_occupants?.length || 0,
+      available_slots: populatedCage.capacity - (populatedCage.current_occupants?.length || 0),
+      message: 'Cage updated successfully',
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * DELETE /api/cages/[id]
+ * Delete a cage
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
+    await connectDB();
+
+    // Extract cage ID from URL
+    const url = new URL(req.url);
+    const cageId = url.pathname.split('/').pop();
+
+    if (!cageId || !mongoose.Types.ObjectId.isValid(cageId)) {
+      throw new ApiError(
+        400,
+        ApiErrorCodes.BAD_REQUEST,
+        'Invalid cage ID'
+      );
+    }
+
+    // Find and delete cage, verifying ownership
+    const cage = await CageModel.findOneAndDelete(
+      {
+        _id: new mongoose.Types.ObjectId(cageId),
+        user_id: userId,
+      },
+      { new: true }
     );
+
+    if (!cage) {
+      throw new ApiError(
+        404,
+        ApiErrorCodes.NOT_FOUND,
+        'Cage not found'
+      );
+    }
+
+    return createSuccessResponse({
+      message: 'Cage deleted successfully',
+      _id: cage._id.toString(),
+    });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

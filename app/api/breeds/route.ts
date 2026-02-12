@@ -1,135 +1,302 @@
-// app/api/breeds/route.ts
-import { NextRequest, NextResponse } from "next/server";import connectDB from "@/lib/mongodb";
-import Breed from "@/database/breed.model"; // assuming your model is exported from here
+import { NextRequest } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import connectDB from '@/lib/mongodb';
+import { Breed as BreedModel } from '@/database/breed.model';
+import {
+  CreateBreedSchema,
+  UpdateBreedSchema,
+  BreedQuerySchema,
+} from '@/lib/validations/breed';
+import {
+  handleApiError,
+  createSuccessResponse,
+  createErrorResponse,
+  ApiErrorCodes,
+  ApiError,
+} from '@/lib/api-error-handler';
+import mongoose from 'mongoose';
 
 /**
- * POST: Create a new breed
+ * GET /api/breeds
+ * Fetch all breeds with pagination, filtering, and sorting
  */
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
     await connectDB();
 
-    const formData = await req.formData();
-    const rawData = Object.fromEntries(formData.entries());
-
-    // Parse optional JSON fields safely
-    let breed_colors: string[] = [];
-    let recommended_feed: string | null = null;
-    let description: string | null = null;
-
-    try {
-      if (rawData.breed_colors) {
-        breed_colors =
-          typeof rawData.breed_colors === "string"
-            ? JSON.parse(rawData.breed_colors)
-            : [];
-      }
-      if (rawData.recommended_feed) {
-        recommended_feed =
-          typeof rawData.recommended_feed === "string"
-            ? JSON.parse(rawData.recommended_feed)
-            : null;
-      }
-      if (rawData.description) {
-        description =
-          typeof rawData.description === "string"
-            ? rawData.description.trim() || null
-            : null;
-      }
-    } catch (parseError) {
-      return NextResponse.json(
-        { message: "Invalid JSON in breed_colors or recommended_feed" },
-        { status: 400 }
-      );
-     } catch (parseError) {
-       return NextResponse.json(
-         { message: "Invalid JSON in breed_colors or recommended_feed" },
-         { status: 400 }
-       );
-     }
-    // Required field
-    const name = (rawData.name as string)?.trim();
-    if (!name) {
-      return NextResponse.json(
-        { message: "Breed name is required" },
-        { status: 400 }
-      );
-    }
-
-    // Optional numeric fields (convert to number or null)
-    const average_weight_kg = rawData.average_weight_kg
-      ? parseFloat(rawData.average_weight_kg as string) || null
-      : null;
-
-    const maturity_age_days = rawData.maturity_age_days
-      ? parseInt(rawData.maturity_age_days as string, 10) || 112
-      : 112;
-
-    // Create the breed
-    const createdBreed = await Breed.create({
-      name,
-      description,
-      average_weight_kg: average_weight_kg,
-      breed_colors,
-      recommended_feed,
-      maturity_age_days,
+    // Parse and validate query parameters
+    const searchParams = req.nextUrl.searchParams;
+    const queryData = BreedQuerySchema.parse({
+      page: searchParams.get('page') || '1',
+      limit: searchParams.get('limit') || '20',
+      search: searchParams.get('search') || undefined,
+      sortBy: searchParams.get('sortBy') || 'name',
+      sortOrder: searchParams.get('sortOrder') || 'asc',
     });
 
-    return NextResponse.json(
-      {
-        message: "Breed created successfully",
-        breed: createdBreed,
-      },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error("Breed creation error:", error);
+    // Build filter
+    const filter: Record<string, any> = { user_id: userId };
 
-    // Handle duplicate key error (unique name)
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { message: "A breed with this name already exists" },
-        { status: 409 }
-      );
+    if (queryData.search) {
+      filter.$or = [
+        { name: { $regex: queryData.search, $options: 'i' } },
+        { description: { $regex: queryData.search, $options: 'i' } },
+      ];
     }
 
-    return NextResponse.json(
-      {
-        message: "Breed creation failed",
-        error: error?.message || "Unknown error",
+    // Build sort
+    const sort: Record<string, 1 | -1> = {};
+    sort[queryData.sortBy] = queryData.sortOrder === 'asc' ? 1 : -1;
+
+    // Calculate pagination
+    const page = queryData.page;
+    const limit = queryData.limit;
+    const skip = (page - 1) * limit;
+
+    // Execute queries in parallel
+    const [breeds, total] = await Promise.all([
+      BreedModel.find(filter)
+        .select('name description average_mature_weight_kg maturity_age_days weaning_age_days grower_age_days')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      BreedModel.countDocuments(filter),
+    ]);
+
+    // Transform data for response
+    const transformedBreeds = breeds.map((breed: any) => ({
+      _id: breed._id.toString(),
+      name: breed.name,
+      description: breed.description,
+      average_mature_weight_kg: breed.average_mature_weight_kg,
+      maturity_age_days: breed.maturity_age_days,
+      weaning_age_days: breed.weaning_age_days,
+      grower_age_days: breed.grower_age_days,
+    }));
+
+    return createSuccessResponse({
+      data: transformedBreeds,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      { status: 500 }
-    );
+    });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 /**
- * GET: Fetch all breeds
+ * POST /api/breeds
+ * Create a new breed
  */
-export async function GET() {
+export async function POST(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
     await connectDB();
 
-    const breeds = await Breed.find()
-      .sort({ createdAt: -1 })
-      .lean(); // lean() for better performance when no modifications needed
+    // Parse request body
+    const body = await req.json();
 
-    return NextResponse.json(
+    // Validate request
+    const validatedData = CreateBreedSchema.parse(body);
+
+    // Check for duplicate breed name for this user
+    const existingBreed = await BreedModel.findOne({
+      user_id: userId,
+      name: validatedData.name,
+    });
+
+    if (existingBreed) {
+      throw new ApiError(
+        409,
+        ApiErrorCodes.DUPLICATE_ENTRY,
+        'A breed with this name already exists'
+      );
+    }
+
+    // Create breed
+    const breed = new BreedModel({
+      user_id: userId,
+      ...validatedData,
+    });
+
+    await breed.save();
+
+    return createSuccessResponse(
       {
-        message: "Breeds fetched successfully",
-        breeds,
-        count: breeds.length,
+        _id: breed._id.toString(),
+        name: breed.name,
+        description: breed.description,
+        average_mature_weight_kg: breed.average_mature_weight_kg,
+        maturity_age_days: breed.maturity_age_days,
+        weaning_age_days: breed.weaning_age_days,
+        grower_age_days: breed.grower_age_days,
+        message: 'Breed created successfully',
       },
-      { status: 200 }
+      201
     );
-  } catch (error: any) {
-    console.error("Fetch breeds error:", error);
-    return NextResponse.json(
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * PUT /api/breeds/[id]
+ * Update an existing breed
+ */
+export async function PUT(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
+    await connectDB();
+
+    // Extract breed ID from URL
+    const url = new URL(req.url);
+    const breedId = url.pathname.split('/').pop();
+
+    if (!breedId || !mongoose.Types.ObjectId.isValid(breedId)) {
+      throw new ApiError(
+        400,
+        ApiErrorCodes.BAD_REQUEST,
+        'Invalid breed ID'
+      );
+    }
+
+    // Parse request body
+    const body = await req.json();
+
+    // Validate request
+    const validatedData = UpdateBreedSchema.parse(body);
+
+    // Find breed and verify ownership
+    const breed = await BreedModel.findOne({
+      _id: new mongoose.Types.ObjectId(breedId),
+      user_id: userId,
+    });
+
+    if (!breed) {
+      throw new ApiError(
+        404,
+        ApiErrorCodes.NOT_FOUND,
+        'Breed not found'
+      );
+    }
+
+    // Check for duplicate breed name if updating it
+    if (validatedData.name && validatedData.name !== breed.name) {
+      const existingBreed = await BreedModel.findOne({
+        user_id: userId,
+        name: validatedData.name,
+        _id: { $ne: breed._id },
+      });
+
+      if (existingBreed) {
+        throw new ApiError(
+          409,
+          ApiErrorCodes.DUPLICATE_ENTRY,
+          'A breed with this name already exists'
+        );
+      }
+    }
+
+    // Update breed
+    Object.assign(breed, validatedData);
+    await breed.save();
+
+    return createSuccessResponse({
+      _id: breed._id.toString(),
+      name: breed.name,
+      description: breed.description,
+      average_mature_weight_kg: breed.average_mature_weight_kg,
+      maturity_age_days: breed.maturity_age_days,
+      weaning_age_days: breed.weaning_age_days,
+      grower_age_days: breed.grower_age_days,
+      message: 'Breed updated successfully',
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * DELETE /api/breeds/[id]
+ * Delete a breed
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return createErrorResponse(
+        401,
+        ApiErrorCodes.UNAUTHORIZED,
+        'Authentication required'
+      );
+    }
+
+    await connectDB();
+
+    // Extract breed ID from URL
+    const url = new URL(req.url);
+    const breedId = url.pathname.split('/').pop();
+
+    if (!breedId || !mongoose.Types.ObjectId.isValid(breedId)) {
+      throw new ApiError(
+        400,
+        ApiErrorCodes.BAD_REQUEST,
+        'Invalid breed ID'
+      );
+    }
+
+    // Find and delete breed, verifying ownership
+    const breed = await BreedModel.findOneAndDelete(
       {
-        message: "Failed to fetch breeds",
-        error: error?.message || "Unknown error",
+        _id: new mongoose.Types.ObjectId(breedId),
+        user_id: userId,
       },
-      { status: 500 }
+      { new: true }
     );
+
+    if (!breed) {
+      throw new ApiError(
+        404,
+        ApiErrorCodes.NOT_FOUND,
+        'Breed not found'
+      );
+    }
+
+    return createSuccessResponse({
+      message: 'Breed deleted successfully',
+      _id: breed._id.toString(),
+    });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

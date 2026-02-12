@@ -95,7 +95,7 @@ const data = {
     projects: [
         {
             name: "Online Store",
-            url: "#",
+            url: "/store",
             emoji: "🛒",
         },
         {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BadgeCheck,
   Bell,
@@ -32,8 +33,29 @@ export function NavUser() {
   const { user } = useUser();
   const { isMobile } = useSidebar();
   const { signOut, openUserProfile } = useClerk();
+  const [isMounted, setIsMounted] = useState(false);
 
-  if (!user) return null; // Add protection for when user data is loading
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Return placeholder during hydration to avoid mismatch
+  if (!isMounted || !user) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg" disabled>
+            <Avatar className="h-8 w-8 rounded-lg">
+              <AvatarFallback className="rounded-lg">--</AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">Loading...</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
 
   const userData = {
     name: user.fullName || `${user.firstName} ${user.lastName}`.trim(),
@@ -109,7 +131,7 @@ export function NavUser() {
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => openUserBilling()}>
+              <DropdownMenuItem>
                 <CreditCard />
                 Billing
               </DropdownMenuItem>

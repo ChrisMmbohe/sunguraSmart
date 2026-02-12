@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
+import { Row } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import { LitterForm, LitterFormData } from '@/components/LitterForm';
 import { LitterTableData } from './types';
 import { Button } from '@/components/ui/button';
 import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
+import { LitterDetailsModal } from '@/components/LitterDetailsModal';
 import {
   Sheet,
   SheetContent,
@@ -30,6 +32,8 @@ export function LittersPageClient({
 }: LittersPageClientProps) {
   const [litters, setLitters] = useState<LitterTableData[]>(initialLitters);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedLitter, setSelectedLitter] = useState<LitterTableData | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -50,6 +54,28 @@ export function LittersPageClient({
       setSubmitStatus({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save litter',
+      });
+    }
+  };
+
+  const handleRowClick = (row: Row<LitterTableData>) => {
+    setSelectedLitter(row.original);
+    setIsDetailsOpen(true);
+  };
+
+  const handleEditLitter = async (data: LitterFormData) => {
+    try {
+      // API integration would happen here
+      console.log('Litter edited:', data);
+      setSubmitStatus({
+        type: 'success',
+        message: 'Litter updated successfully!',
+      });
+      setIsDetailsOpen(false);
+    } catch (error) {
+      setSubmitStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to update litter',
       });
     }
   };
@@ -143,8 +169,26 @@ export function LittersPageClient({
 
       {/* Data Table */}
       <div className="rounded-lg border border-border">
-        <DataTable columns={columns} data={litters} />
+        <DataTable
+          columns={columns}
+          data={litters}
+          onRowClick={handleRowClick}
+        />
       </div>
+
+      {/* Details Modal */}
+      {selectedLitter && (
+        <LitterDetailsModal
+          litter={selectedLitter}
+          breedings={initialBreedings}
+          isOpen={isDetailsOpen}
+          onClose={() => {
+            setIsDetailsOpen(false);
+            setSelectedLitter(null);
+          }}
+          onEdit={handleEditLitter}
+        />
+      )}
 
       {/* Empty State */}
       {litters.length === 0 && (

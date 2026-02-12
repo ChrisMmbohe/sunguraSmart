@@ -34,12 +34,20 @@ export interface RabbitFormData {
   current_cage_id: string;
   status: string;
   source_type: 'Born' | 'Purchased' | 'Gifted';
+  source_farm: string;
   is_pregnant: boolean;
+  photo_url: string;
+}
+
+interface IEarTagOption {
+  id: string;
+  label: string;
 }
 
 interface RabbitFormProps {
   breeds: IBreedOption[];
   cages: ICageOption[];
+  earTagOptions?: IEarTagOption[];
   onSubmit: (data: RabbitFormData) => Promise<void> | void;
   onCancel: () => void;
   initialData?: Partial<RabbitFormData>;
@@ -52,6 +60,7 @@ const SOURCE_TYPES: Array<'Born' | 'Purchased' | 'Gifted'> = ['Born', 'Purchased
 export function RabbitForm({
   breeds,
   cages,
+  earTagOptions = [],
   onSubmit,
   onCancel,
   initialData,
@@ -66,7 +75,9 @@ export function RabbitForm({
     current_cage_id: initialData?.current_cage_id || '',
     status: initialData?.status || 'Kit',
     source_type: initialData?.source_type || 'Born',
+    source_farm: initialData?.source_farm || '',
     is_pregnant: initialData?.is_pregnant || false,
+    photo_url: initialData?.photo_url || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -96,6 +107,20 @@ export function RabbitForm({
     }
     if (!formData.source_type) {
       newErrors.source_type = 'Source type is required';
+    }
+    // Validate source_farm is required for Purchased or Gifted
+    if (['Purchased', 'Gifted'].includes(formData.source_type)) {
+      if (!formData.source_farm.trim()) {
+        newErrors.source_farm = 'Source farm/seller is required for Purchased or Gifted rabbits';
+      }
+    }
+    // Validate photo URL format if provided
+    if (formData.photo_url.trim()) {
+      try {
+        new URL(formData.photo_url);
+      } catch {
+        newErrors.photo_url = 'Please enter a valid URL';
+      }
     }
 
     setErrors(newErrors);
@@ -153,15 +178,30 @@ export function RabbitForm({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="ear_tag_id">Ear Tag ID *</Label>
-              <Input
-                id="ear_tag_id"
-                placeholder="e.g., A1-001"
-                value={formData.ear_tag_id}
-                onChange={(e) => handleChange('ear_tag_id', e.target.value)}
-                disabled={isFormSubmitting}
-                aria-invalid={!!errors.ear_tag_id}
-                aria-describedby={errors.ear_tag_id ? 'ear_tag_id-error' : undefined}
-              />
+              {earTagOptions.length > 0 ? (
+                <Select value={formData.ear_tag_id} onValueChange={(value) => handleChange('ear_tag_id', value)} disabled={isFormSubmitting}>
+                  <SelectTrigger id="ear_tag_id" aria-invalid={!!errors.ear_tag_id} aria-describedby={errors.ear_tag_id ? 'ear_tag_id-error' : undefined}>
+                    <SelectValue placeholder="Select an available ear tag ID" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {earTagOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="ear_tag_id"
+                  placeholder="e.g., A1-001"
+                  value={formData.ear_tag_id}
+                  onChange={(e) => handleChange('ear_tag_id', e.target.value)}
+                  disabled={isFormSubmitting}
+                  aria-invalid={!!errors.ear_tag_id}
+                  aria-describedby={errors.ear_tag_id ? 'ear_tag_id-error' : undefined}
+                />
+              )}
               {errors.ear_tag_id && (
                 <p id="ear_tag_id-error" className="text-sm text-red-600">
                   {errors.ear_tag_id}
@@ -308,6 +348,52 @@ export function RabbitForm({
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Source Farm (Conditional - only for Purchased/Gifted) */}
+          {['Purchased', 'Gifted'].includes(formData.source_type) && (
+            <div className="space-y-2">
+              <Label htmlFor="source_farm">Source Farm/Seller *</Label>
+              <Input
+                id="source_farm"
+                placeholder="e.g., John's Rabbit Farm or Breeder Name"
+                value={formData.source_farm}
+                onChange={(e) => handleChange('source_farm', e.target.value)}
+                disabled={isFormSubmitting}
+                aria-invalid={!!errors.source_farm}
+                aria-describedby={errors.source_farm ? 'source_farm-error' : undefined}
+              />
+              {errors.source_farm && (
+                <p id="source_farm-error" className="text-sm text-red-600">
+                  {errors.source_farm}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Photo URL */}
+          <div className="space-y-2">
+            <Label htmlFor="photo_url">Photo URL (Optional)</Label>
+            <Input
+              id="photo_url"
+              type="url"
+              placeholder="e.g., https://example.com/rabbit-photo.jpg"
+              value={formData.photo_url}
+              onChange={(e) => handleChange('photo_url', e.target.value)}
+              disabled={isFormSubmitting}
+              aria-invalid={!!errors.photo_url}
+              aria-describedby={errors.photo_url ? 'photo_url-error' : undefined}
+            />
+            {errors.photo_url && (
+              <p id="photo_url-error" className="text-sm text-red-600">
+                {errors.photo_url}
+              </p>
+            )}
+            {formData.photo_url && (
+              <div className="mt-2 flex justify-center">
+                <img src={formData.photo_url} alt="Rabbit preview" className="h-32 w-32 rounded-lg object-cover" />
+              </div>
+            )}
           </div>
 
           {/* Pregnancy checkbox */}

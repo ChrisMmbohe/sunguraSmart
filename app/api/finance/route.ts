@@ -1,5 +1,6 @@
 // app/api/finance/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { Sale, Expense } from '@/database';
 import { initModels } from '@/database/index';
 import connectDB from '@/lib/mongodb';
@@ -67,13 +68,17 @@ function getDateRange(period: string): { start: Date; end: Date } {
 
 export async function GET(req: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await connectDB();
     initModels();
 
     // Get period from query params
     const searchParams = req.nextUrl.searchParams;
     const period = searchParams.get('period') || '30d';
-    const userId = searchParams.get('userId') || 'test-user'; // Default for testing
 
     const { start, end } = getDateRange(period);
 

@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
+import { Row } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import { BreedingForm, BreedingFormData } from '@/components/BreedingForm';
 import { BreedingTableData } from './types';
 import { Button } from '@/components/ui/button';
 import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
+import { BreedingDetailsModal } from '@/components/BreedingDetailsModal';
 import {
   Sheet,
   SheetContent,
@@ -30,6 +32,8 @@ export function BreedingPageClient({
 }: BreedingPageClientProps) {
   const [breedings, setBreedings] = useState<BreedingTableData[]>(initialBreedings);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedBreeding, setSelectedBreeding] = useState<BreedingTableData | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -50,6 +54,28 @@ export function BreedingPageClient({
       setSubmitStatus({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save breeding',
+      });
+    }
+  };
+
+  const handleRowClick = (row: Row<BreedingTableData>) => {
+    setSelectedBreeding(row.original);
+    setIsDetailsOpen(true);
+  };
+
+  const handleEditBreeding = async (data: BreedingFormData) => {
+    try {
+      // API integration would happen here
+      console.log('Breeding edited:', data);
+      setSubmitStatus({
+        type: 'success',
+        message: 'Breeding updated successfully!',
+      });
+      setIsDetailsOpen(false);
+    } catch (error) {
+      setSubmitStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to update breeding',
       });
     }
   };
@@ -140,8 +166,26 @@ export function BreedingPageClient({
 
       {/* Data Table */}
       <div className="rounded-lg border border-border">
-        <DataTable columns={columns} data={breedings} />
+        <DataTable
+          columns={columns}
+          data={breedings}
+          onRowClick={handleRowClick}
+        />
       </div>
+
+      {/* Details Modal */}
+      {selectedBreeding && (
+        <BreedingDetailsModal
+          breeding={selectedBreeding}
+          rabbits={initialRabbits}
+          isOpen={isDetailsOpen}
+          onClose={() => {
+            setIsDetailsOpen(false);
+            setSelectedBreeding(null);
+          }}
+          onEdit={handleEditBreeding}
+        />
+      )}
 
       {/* Empty State */}
       {breedings.length === 0 && (

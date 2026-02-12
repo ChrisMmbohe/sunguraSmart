@@ -10,6 +10,7 @@ import {
   Weight,
   DollarSign,
   ChevronRight,
+  Rabbit,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -139,7 +140,7 @@ export const DEFAULT_QUICK_ACTIONS: QuickActionItem[] = [
   {
     id: "add-litter",
     label: "Add Litter",
-    icon: <Baby className="h-4 w-4" />,
+    icon: <Rabbit className="h-4 w-4" />,
     description: "Record a new litter",
     href: "/litters",
     color: "success",

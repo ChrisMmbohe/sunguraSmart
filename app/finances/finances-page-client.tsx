@@ -50,7 +50,7 @@ export function FinancePageClient() {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/finance?period=${period}&userId=test-user`);
+        const response = await fetch(`/api/finance?period=${period}&userId=user_35OANY8FLr0alL39uNrIT2qD37v`);
         if (!response.ok) {
           throw new Error('Failed to fetch finance data');
         }

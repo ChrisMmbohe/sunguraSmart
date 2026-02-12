@@ -120,18 +120,26 @@ export function HealthRecordForm({
   };
 
   const handleInputChange = (field: keyof HealthRecordFormData, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-    }));
-    // Clear error for this field when user starts typing
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-clear quarantine when treatment ends (disease resolved)
+      if (field === 'treatment_end_date' && value) {
+        // If user sets a treatment end date, automatically clear quarantine
+        updated.quarantined = false;
+      }
+      
+      // Clear errors when user starts typing
+      if (errors[field]) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[field];
+          return newErrors;
+        });
+      }
+      
+      return updated;
+    });
   };
 
   const getRabbitDisplayName = (rabbit: IRabbitOption): string => {
@@ -275,7 +283,7 @@ export function HealthRecordForm({
                 id="quarantined"
                 checked={formData.quarantined || shouldForceQuarantine}
                 onCheckedChange={(checked) => handleInputChange('quarantined', checked)}
-                disabled={isLoading || submitting || shouldForceQuarantine}
+                disabled={isLoading || submitting || shouldForceQuarantine || !!formData.treatment_end_date}
               />
               <Label htmlFor="quarantined" className="flex items-center gap-2 cursor-pointer">
                 <Activity className="h-4 w-4" />
@@ -285,6 +293,11 @@ export function HealthRecordForm({
             {shouldForceQuarantine && (
               <p className="text-xs text-amber-600">
                 ⚠️ This disease is quarantinable and will automatically set quarantine status
+              </p>
+            )}
+            {formData.treatment_end_date && (
+              <p className="text-xs text-green-600">
+                ✓ Treatment ends on {new Date(formData.treatment_end_date).toLocaleDateString()} - Quarantine will be lifted
               </p>
             )}
           </div>

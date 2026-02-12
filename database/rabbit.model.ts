@@ -23,6 +23,8 @@ const RabbitSchema = new Schema<IRabbit>({
     parent_buck_id: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null, index: true },
     // ✅ FIX: Added the field/virtual for pregnancy status
     is_pregnant: { type: Boolean, default: false },
+    // Photo URL field
+    photo_url: { type: String, default: null, trim: true },
 }, { timestamps: true, toJSON: { virtuals: true } });
 
 // Virtual for Age calculation

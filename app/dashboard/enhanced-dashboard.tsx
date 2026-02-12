@@ -8,7 +8,7 @@ import { AlertBanner } from "@/components/AlertBanner";
 import { QuickActions, DEFAULT_QUICK_ACTIONS } from "@/components/QuickActions";
 import { UpcomingTasks, type UpcomingTask } from "@/components/UpcomingTasks";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, TrendingUp, Users, Zap } from "lucide-react";
+import { AlertCircle, Rabbit, TrendingUp, Users, Zap } from "lucide-react";
 import { addDays, subDays } from "date-fns";
 
 interface DashboardData {
@@ -17,6 +17,23 @@ interface DashboardData {
     activeBreeding: number;
     recentSales: number;
     healthAlerts: number;
+    rabbitDetails?: {
+      does: number;
+      bucks: number;
+      kits: number;
+    };
+    breedingDetails?: {
+      scheduled: number;
+      inProgress: number;
+    };
+    salesDetails?: {
+      revenue: number;
+      profitMargin: number;
+    };
+    healthDetails?: {
+      requireingAction: number;
+      monitoring: number;
+    };
   };
   trends: {
     rabbits: number;
@@ -71,7 +88,6 @@ const generateMockActivities = (): ActivityItem[] => [
     description: "Luna (ID: R001) bred with Max (ID: R002)",
     timestamp: subDays(new Date(), 0),
     status: "success",
-    href: "/breeding",
   },
   {
     id: "2",
@@ -80,7 +96,6 @@ const generateMockActivities = (): ActivityItem[] => [
     description: "Luna gave birth to 8 kits",
     timestamp: subDays(new Date(), 2),
     status: "success",
-    href: "/litters",
   },
   {
     id: "3",
@@ -89,7 +104,6 @@ const generateMockActivities = (): ActivityItem[] => [
     description: "Daisy showing signs of respiratory distress",
     timestamp: subDays(new Date(), 1),
     status: "alert",
-    href: "/health",
   },
   {
     id: "4",
@@ -98,7 +112,6 @@ const generateMockActivities = (): ActivityItem[] => [
     description: "4 rabbits sold to local buyer",
     timestamp: subDays(new Date(), 3),
     status: "success",
-    href: "/finances",
   },
   {
     id: "5",
@@ -184,6 +197,7 @@ export function EnhancedDashboard({
 }: EnhancedDashboardProps) {
   const [data, setData] = useState<DashboardData | null>(initialData || null);
   const [isLoading, setIsLoading] = useState(!initialData);
+  const [error, setError] = useState<string | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(
     new Set()
   );
@@ -195,36 +209,76 @@ export function EnhancedDashboard({
     new Set()
   );
 
-  // Load data on mount
+  /**
+   * Fetch dashboard data from the API
+   */
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const timeRangeValue = selectedTimeRange.replace('d', '');
+      console.log(`[EnhancedDashboard] Fetching data with timeRange: ${timeRangeValue}d`);
+      
+      const response = await fetch(
+        `/api/dashboard?timeRange=${timeRangeValue}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch dashboard data: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const dashboardData: DashboardData = await response.json();
+      console.log('[EnhancedDashboard] Successfully fetched data:', dashboardData);
+
+      // Convert ISO strings to Date objects for activities and tasks
+      const processedData: DashboardData = {
+        ...dashboardData,
+        activities: dashboardData.activities.map((activity) => ({
+          ...activity,
+          timestamp:
+            typeof activity.timestamp === 'string'
+              ? new Date(activity.timestamp)
+              : activity.timestamp,
+        })),
+        tasks: dashboardData.tasks.map((task) => ({
+          ...task,
+          dueDate:
+            typeof task.dueDate === 'string'
+              ? new Date(task.dueDate)
+              : task.dueDate,
+        })),
+      };
+
+      setData(processedData);
+    } catch (err) {
+      console.error('[EnhancedDashboard] Error fetching data:', err);
+      setError(
+        err instanceof Error ? err.message : 'Failed to fetch dashboard data'
+      );
+      // Display error state without fallback mock data
+      setData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load data on mount and when timeRange changes
   useEffect(() => {
     if (!initialData) {
-      // Simulate loading data
-      const timer = setTimeout(() => {
-        setData({
-          stats: {
-            totalRabbits: 42,
-            activeBreeding: 8,
-            recentSales: 12,
-            healthAlerts: 2,
-          },
-          trends: {
-            rabbits: 5,
-            breeding: 12,
-            sales: 8,
-            health: -15,
-          },
-          chartData: generateMockChartData(),
-          activities: generateMockActivities(),
-          tasks: generateMockTasks(),
-          alerts: generateMockAlerts(),
-        });
-        setIsLoading(false);
-      }, 1000);
-      return () => clearTimeout(timer);
+      fetchDashboardData();
     }
-  }, [initialData]);
+  }, [initialData, selectedTimeRange]);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         {/* Stats Skeleton */}
@@ -235,6 +289,20 @@ export function EnhancedDashboard({
         </div>
         {/* Chart Skeleton */}
         <Skeleton className="h-96" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="space-y-6">
+        <AlertBanner
+          type="error"
+          title="Failed to Load Dashboard"
+          description={error || 'Unable to fetch dashboard data. Please try refreshing the page.'}
+          dismissible={true}
+          onDismiss={() => setError(null)}
+        />
       </div>
     );
   }
@@ -260,7 +328,6 @@ export function EnhancedDashboard({
               type={alert.type}
               title={alert.title}
               description={alert.description}
-              icon={alert.type === "error" ? AlertCircle : undefined}
               dismissible={alert.dismissible}
               onDismiss={() => {
                 const newSet = new Set(dismissedAlerts);
@@ -277,58 +344,70 @@ export function EnhancedDashboard({
         <StatCard
           title="Total Rabbits"
           value={data.stats.totalRabbits}
-          unit="rabbits"
-          trend={data.trends.rabbits}
+          trend={{
+            value: `${Math.abs(data.trends.rabbits)}%`,
+            positive: data.trends.rabbits >= 0,
+            percentage: Math.abs(data.trends.rabbits),
+          }}
           color="primary"
-          icon={<Users className="h-5 w-5" />}
+          icon={<Rabbit className="h-5 w-5" />}
           href="/rabbits"
           tooltipContent="View all rabbits in the system"
           details={[
-            { label: "Does", value: "18" },
-            { label: "Bucks", value: "14" },
-            { label: "Kits", value: "10" },
+            { label: "Does", value: `${data.stats.rabbitDetails?.does || 0}` },
+            { label: "Bucks", value: `${data.stats.rabbitDetails?.bucks || 0}` },
+            { label: "Kits", value: `${data.stats.rabbitDetails?.kits || 0}` },
           ]}
         />
         <StatCard
           title="Active Breeding"
           value={data.stats.activeBreeding}
-          unit="does breeding"
-          trend={data.trends.breeding}
+          trend={{
+            value: `${Math.abs(data.trends.breeding)}%`,
+            positive: data.trends.breeding >= 0,
+            percentage: Math.abs(data.trends.breeding),
+          }}
           color="success"
           icon={<TrendingUp className="h-5 w-5" />}
           href="/breeding"
           tooltipContent="View breeding records"
           details={[
-            { label: "Scheduled", value: "3" },
-            { label: "In Progress", value: "5" },
+            { label: "Scheduled", value: `${data.stats.breedingDetails?.scheduled || 0}` },
+            { label: "In Progress", value: `${data.stats.breedingDetails?.inProgress || 0}` },
           ]}
         />
         <StatCard
           title="Recent Sales"
           value={data.stats.recentSales}
-          unit="this month"
-          trend={data.trends.sales}
+          trend={{
+            value: `${Math.abs(data.trends.sales)}%`,
+            positive: data.trends.sales >= 0,
+            percentage: Math.abs(data.trends.sales),
+          }}
           color="info"
           icon={<TrendingUp className="h-5 w-5" />}
           href="/finances"
           tooltipContent="View sales and finances"
           details={[
-            { label: "Revenue", value: "$450" },
-            { label: "Profit Margin", value: "35%" },
+            { label: "Revenue", value: `$${data.stats.salesDetails?.revenue || 0}` },
+            { label: "Profit Margin", value: `${data.stats.salesDetails?.profitMargin || 0}%` },
           ]}
         />
         <StatCard
           title="Health Alerts"
           value={data.stats.healthAlerts}
-          unit="active alerts"
-          trend={data.trends.health}
+          trend={{
+            value: `${Math.abs(data.trends.health)}%`,
+            positive: data.trends.health <= 0,
+            percentage: Math.abs(data.trends.health),
+          }}
           color={data.stats.healthAlerts > 0 ? "warning" : "success"}
           icon={<Zap className="h-5 w-5" />}
           href="/health"
           tooltipContent="View health records"
           details={[
-            { label: "Requiring Action", value: "2" },
-            { label: "Monitoring", value: "1" },
+            { label: "Requiring Action", value: `${data.stats.healthDetails?.requireingAction || 0}` },
+            { label: "Monitoring", value: `${data.stats.healthDetails?.monitoring || 0}` },
           ]}
         />
       </div>
@@ -352,12 +431,12 @@ export function EnhancedDashboard({
             type="line"
             dataKeys={["rabbits", "sales", "vaccinations", "weights"]}
             height={400}
-            timeRange={selectedTimeRange}
+            timeRange={selectedTimeRange as "30d" | "7d" | "90d" | "1y"}
             onTimeRangeChange={setSelectedTimeRange}
             showExport={true}
             showFullscreen={true}
-            tooltip={{ enabled: true }}
-            legend={{ enabled: true }}
+            tooltip={true}
+            legend={true}
             isLoading={false}
           />
         </div>
@@ -382,12 +461,12 @@ export function EnhancedDashboard({
         activities={filteredActivities}
         isLoading={false}
         maxItems={6}
-        onActivityRemove={(activityId) => {
+        onActivityClick={(activity) => {
           const newSet = new Set(dismissedActivities);
-          newSet.add(activityId);
+          newSet.add(activity.id);
           setDismissedActivities(newSet);
         }}
-        showRemove={true}
+        className=""
       />
 
       {/* Secondary Charts Grid (Optional) */}
@@ -403,8 +482,8 @@ export function EnhancedDashboard({
             timeRange="30d"
             showExport={false}
             showFullscreen={false}
-            tooltip={{ enabled: true }}
-            legend={{ enabled: false }}
+            tooltip={true}
+            legend={false}
             colors={["hsl(var(--chart-2))"] as any}
           />
           <InteractiveChart
@@ -420,8 +499,8 @@ export function EnhancedDashboard({
             height={300}
             showExport={false}
             showFullscreen={false}
-            tooltip={{ enabled: true }}
-            legend={{ enabled: true }}
+            tooltip={true}
+            legend={true}
           />
         </div>
       )}

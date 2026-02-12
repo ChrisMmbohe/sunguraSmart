@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
+import { Row } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import { RabbitForm, RabbitFormData } from '@/components/RabbitForm';
 import { RabbitTableData } from './types';
 import { Button } from '@/components/ui/button';
 import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
+import { RabbitDetailsModal } from '@/components/RabbitDetailsModal';
 import {
   Sheet,
   SheetContent,
@@ -21,6 +23,7 @@ interface RabbitsPageClientProps {
   initialRabbits: RabbitTableData[];
   initialBreeds: IBreedOption[];
   initialCages: ICageOption[];
+  initialEarTags: { id: string; label: string }[];
   columns: ColumnDef<RabbitTableData>[];
 }
 
@@ -28,10 +31,13 @@ export function RabbitsPageClient({
   initialRabbits,
   initialBreeds,
   initialCages,
+  initialEarTags,
   columns,
 }: RabbitsPageClientProps) {
   const [rabbits] = useState<RabbitTableData[]>(initialRabbits);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedRabbit, setSelectedRabbit] = useState<RabbitTableData | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -41,27 +47,71 @@ export function RabbitsPageClient({
     try {
       setSubmitStatus({ type: null, message: '' });
 
-      // TODO: Replace with actual API call to submit the form
-      // For now, we're just showing that the form is ready for backend integration
-      console.log('Form data submitted:', data);
+      // Call the API endpoint
+      const response = await fetch('/api/rabbits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
 
-      // Simulate an optimistic update (in a real app, you'd wait for the API response)
-      // and then refetch the data or update the local state based on the API response.
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save rabbit');
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const result = await response.json();
 
       setSubmitStatus({
         type: 'success',
-        message: 'Rabbit saved successfully! (Note: This is frontend-only. Backend integration pending.)',
+        message: `Rabbit "${data.ear_tag_id}" saved successfully!`,
       });
 
       setIsFormOpen(false);
 
-      // Optionally, you could refetch the rabbits data here:
-      // const updated = await getRabbitsForTable();
-      // setRabbits(updated);
+      // Note: In a production app, you would refetch the rabbits data here
+      // to update the table with the newly created rabbit. This would require
+      // either server-side revalidation or client-side state management.
     } catch (error) {
       setSubmitStatus({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to save rabbit',
+      });
+    }
+  };
+
+  const handleRowClick = (row: Row<RabbitTableData>) => {
+    setSelectedRabbit(row.original);
+    setIsDetailsOpen(true);
+  };
+
+  const handleEditRabbit = async (data: RabbitFormData) => {
+    try {
+      const response = await fetch(`/api/rabbits/${selectedRabbit?._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update rabbit');
+      }
+
+      setSubmitStatus({
+        type: 'success',
+        message: 'Rabbit updated successfully!',
+      });
+
+      setIsDetailsOpen(false);
+    } catch (error) {
+      setSubmitStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to update rabbit',
       });
     }
   };
@@ -119,6 +169,7 @@ export function RabbitsPageClient({
               <RabbitForm
                 breeds={initialBreeds}
                 cages={initialCages}
+                earTagOptions={initialEarTags}
                 onSubmit={handleFormSubmit}
                 onCancel={() => setIsFormOpen(false)}
               />
@@ -132,8 +183,25 @@ export function RabbitsPageClient({
         <DataTable
           columns={columns}
           data={rabbits}
+          onRowClick={handleRowClick}
         />
       </div>
+
+      {/* Details Modal */}
+      {selectedRabbit && (
+        <RabbitDetailsModal
+          rabbit={selectedRabbit}
+          breeds={initialBreeds}
+          cages={initialCages}
+          earTagOptions={initialEarTags}
+          isOpen={isDetailsOpen}
+          onClose={() => {
+            setIsDetailsOpen(false);
+            setSelectedRabbit(null);
+          }}
+          onEdit={handleEditRabbit}
+        />
+      )}
 
       {/* Empty State */}
       {rabbits.length === 0 && (
