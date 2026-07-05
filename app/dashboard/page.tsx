@@ -27,7 +27,7 @@ import React, { useState, useEffect } from 'react'; // Import React hooks
 interface StatData {
   title: string;
   metric: string;
-  icon: JSX.Element;
+  icon: React.JSX.Element;
   key: keyof APIStats; // Use keys for mapping
 }
 
