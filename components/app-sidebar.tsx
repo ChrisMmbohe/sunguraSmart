@@ -56,6 +56,12 @@ const data = {
             emoji: "🩺",
             
         },
+        {
+            title: "Feeds",
+            url: "/feeds",
+            emoji: "🌾",
+            
+        },
          {
             title: "Finances",
             url: "/finances",

@@ -3,6 +3,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+  ---------------------------------------------------------------------------
+  SunguraSmart color system — "Field Ledger"
+  ---------------------------------------------------------------------------
+  Replaces the generic shadcn zinc/neutral defaults with a palette drawn from
+  the product's own domain: warm parchment (the paper trail a farm used to
+  run on), moss green (growth, the primary brand color), and clay/terracotta
+  (an accent reserved for things that need attention — alerts, highlights,
+  CTAs). All tokens below are consumed by @theme inline further down and by
+  every shadcn/ui component in the app, so light and dark mode stay
+  consistent across dashboard, tables, dialogs, and the marketing pages.
+*/
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -45,71 +58,98 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.25);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.147 0.004 49.25);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.25);
-  --primary: oklch(0.216 0.006 56.043);
-  --primary-foreground: oklch(0.985 0.001 106.423);
-  --secondary: oklch(0.97 0.001 106.424);
-  --secondary-foreground: oklch(0.216 0.006 56.043);
-  --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: oklch(0.97 0.001 106.424);
-  --accent-foreground: oklch(0.216 0.006 56.043);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.923 0.003 48.717);
-  --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.709 0.01 56.259);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* Warm parchment paper, deep moss ink */
+  --background: oklch(0.9790 0.0082 91.482);
+  --foreground: oklch(0.2917 0.0348 138.443);
+
+  --card: oklch(0.9909 0.0082 91.481);
+  --card-foreground: oklch(0.2917 0.0348 138.443);
+  --popover: oklch(0.9909 0.0082 91.481);
+  --popover-foreground: oklch(0.2917 0.0348 138.443);
+
+  /* Primary — moss green, the brand color used for CTAs, active states, links */
+  --primary: oklch(0.4934 0.0769 134.019);
+  --primary-foreground: oklch(0.9700 0.0082 91.483);
+
+  /* Secondary — soft sand, for lower-emphasis surfaces (secondary buttons, chips) */
+  --secondary: oklch(0.9286 0.0210 88.724);
+  --secondary-foreground: oklch(0.3275 0.0219 84.487);
+
+  --muted: oklch(0.9429 0.0165 91.555);
+  --muted-foreground: oklch(0.5563 0.0411 91.814);
+
+  /* Accent — clay/terracotta, reserved for things that should draw the eye */
+  --accent: oklch(0.5499 0.1181 47.254);
+  --accent-foreground: oklch(0.9942 0.0069 88.641);
+
+  --destructive: oklch(0.5013 0.1783 28.705);
+
+  --border: oklch(0.8733 0.0321 91.045);
+  --input: oklch(0.8733 0.0321 91.045);
+  --ring: oklch(0.4934 0.0769 134.019);
+
+  /* Chart sequence — moss, clay, straw, teal, mauve: distinguishable, all in-family */
+  --chart-1: oklch(0.4934 0.0769 134.019);
+  --chart-2: oklch(0.5499 0.1181 47.254);
+  --chart-3: oklch(0.7352 0.1265 80.812);
+  --chart-4: oklch(0.4955 0.0497 195.667);
+  --chart-5: oklch(0.5294 0.0677 358.508);
+
+  --sidebar: oklch(0.9520 0.0165 91.553);
+  --sidebar-foreground: oklch(0.2917 0.0348 138.443);
+  --sidebar-primary: oklch(0.4934 0.0769 134.019);
+  --sidebar-primary-foreground: oklch(0.9700 0.0082 91.483);
+  --sidebar-accent: oklch(0.9069 0.0277 90.917);
+  --sidebar-accent-foreground: oklch(0.2917 0.0348 138.443);
+  --sidebar-border: oklch(0.8733 0.0321 91.045);
+  --sidebar-ring: oklch(0.4934 0.0769 134.019);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.9521 0 0);
-  --chart-2: oklch(0.8576 0 0);
-  --chart-3: oklch(0.7572 0 0);
-  --chart-4: oklch(0.6534 0 0);
-  --chart-5: oklch(0.5452 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Deep moss charcoal, warm parchment text */
+  --background: oklch(0.2385 0.0189 135.247);
+  --foreground: oklch(0.9487 0.0178 92.685);
+
+  --card: oklch(0.2741 0.0237 132.472);
+  --card-foreground: oklch(0.9487 0.0178 92.685);
+  --popover: oklch(0.2741 0.0237 132.472);
+  --popover-foreground: oklch(0.9487 0.0178 92.685);
+
+  /* Primary — brightened sage so it holds contrast on a dark surface */
+  --primary: oklch(0.7256 0.0886 134.409);
+  --primary-foreground: oklch(0.2283 0.0343 133.309);
+
+  --secondary: oklch(0.3177 0.0260 129.416);
+  --secondary-foreground: oklch(0.9179 0.0246 94.082);
+
+  --muted: oklch(0.2860 0.0250 130.893);
+  --muted-foreground: oklch(0.7033 0.0398 97.254);
+
+  /* Accent — brightened clay */
+  --accent: oklch(0.6543 0.1195 52.488);
+  --accent-foreground: oklch(0.1911 0.0225 65.888);
+
+  --destructive: oklch(0.6512 0.1437 29.349);
+
+  --border: oklch(0.9487 0.0178 92.685 / 12%);
+  --input: oklch(0.9487 0.0178 92.685 / 16%);
+  --ring: oklch(0.7256 0.0886 134.409);
+
+  --chart-1: oklch(0.7256 0.0886 134.409);
+  --chart-2: oklch(0.7226 0.1196 52.484);
+  --chart-3: oklch(0.8330 0.1185 88.346);
+  --chart-4: oklch(0.6791 0.0551 195.931);
+  --chart-5: oklch(0.6737 0.0689 354.272);
+
+  --sidebar: oklch(0.2544 0.0234 129.549);
+  --sidebar-foreground: oklch(0.9487 0.0178 92.685);
+  --sidebar-primary: oklch(0.7256 0.0886 134.409);
+  --sidebar-primary-foreground: oklch(0.2283 0.0343 133.309);
+  --sidebar-accent: oklch(0.3177 0.0260 129.416);
+  --sidebar-accent-foreground: oklch(0.9487 0.0178 92.685);
+  --sidebar-border: oklch(0.9487 0.0178 92.685 / 12%);
+  --sidebar-ring: oklch(0.7256 0.0886 134.409);
 }
 
 @layer base {
