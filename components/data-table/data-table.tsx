@@ -40,7 +40,7 @@ interface DataTableProps<TData, TValue> {
   /** Passed straight through to useReactTable's `meta` — lets cell renderers
    *  (e.g. a row-actions dropdown) call back into page-level state (open a
    *  dialog, delete a row) without column defs needing to own that state. */
-  meta?: TableMeta<TData>
+  meta?: Partial<TableMeta<TData>>
   /** Fires whenever the filtered row set changes (search, facets, or the
    *  underlying data itself) — lets a summary stats bar above the table
    *  stay in sync with whatever the user is currently looking at. */
@@ -67,7 +67,7 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    meta,
+    meta: meta as TableMeta<TData> | undefined,
     state: { sorting, columnFilters, columnVisibility, rowSelection, globalFilter },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,

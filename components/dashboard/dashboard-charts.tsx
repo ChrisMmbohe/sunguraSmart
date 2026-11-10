@@ -21,12 +21,21 @@ import type { PieSectorDataItem } from "recharts/types/polar/Pie"
 // Shared tokens
 // ---------------------------------------------------------------------------
 
-// Semantic finance colors — deliberately distinct from the red/destructive
-// used for health alerts elsewhere on the dashboard, so "expense" never
-// reads as "danger."
-const REVENUE_COLOR = "#059669" // emerald-600
-const EXPENSE_COLOR = "#f97316" // orange-500
-const NET_COLOR = "#6366f1" // indigo-500
+// Shared semantic chart palette used across dashboard summary pages.
+// These values intentionally stay stable and readable across light/dark.
+export const CHART_COLORS = {
+  revenue: "#059669", // emerald-600
+  expense: "#f97316", // orange-500
+  net: "#6366f1", // indigo-500
+  category: "#8b5cf6", // violet-500
+  warning: "#f59e0b", // amber-500
+  success: "#10b981", // emerald-500
+  neutral: "#94a3b8", // slate-400
+}
+
+const REVENUE_COLOR = CHART_COLORS.revenue
+const EXPENSE_COLOR = CHART_COLORS.expense
+const NET_COLOR = CHART_COLORS.net
 
 // Breed palette. NOTE: this app's globals.css does not define --chart-1..5
 // (those tokens are only wired up if the shadcn "charts" block was
@@ -337,7 +346,6 @@ export function PopulationByBreedChart({ data }: { data: BreedPopulationSlice[] 
               outerRadius={88}
               paddingAngle={2}
               strokeWidth={0}
-              activeIndex={activeIndex}
               activeShape={renderActiveSlice}
               onMouseEnter={(_, i) => setActiveIndex(i)}
               onMouseLeave={() => setActiveIndex(undefined)}

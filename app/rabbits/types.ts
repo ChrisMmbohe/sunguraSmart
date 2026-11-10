@@ -48,6 +48,18 @@ export interface RabbitFormOptions {
   does: SelectOption[] // active females, for dam select
 }
 
+export const breedFormSchema = z.object({
+  name: z.string().trim().min(1, "Breed name is required").max(80),
+  description: z.string().trim().max(300).optional().or(z.literal("")),
+  averageAdultWeightKg: z.coerce.number().min(0).optional(),
+  averageLitterSize: z.coerce.number().min(0).optional(),
+  gestationDays: z.coerce.number().int().min(1).default(31),
+  maturityAgeDays: z.coerce.number().int().min(1).default(150),
+  weaningAgeDays: z.coerce.number().int().min(1).default(42),
+})
+
+export type BreedFormValues = z.infer<typeof breedFormSchema>
+
 // ---------------------------------------------------------------------------
 // Validation — shared between the client form and the server actions so
 // both sides reject the same bad input.
@@ -72,6 +84,23 @@ export const rabbitFormSchema = z.object({
   color: z.string().trim().max(60).optional().or(z.literal("")),
   markings: z.string().trim().max(120).optional().or(z.literal("")),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
+}).superRefine((values, ctx) => {
+  if (values.acquisitionType === AcquisitionType.PURCHASED && values.acquisitionCost === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["acquisitionCost"], message: "Purchase cost is required" })
+  }
+
+  if (values.acquisitionType !== AcquisitionType.BORN_ON_FARM) return
+
+  if (!values.dateOfBirth) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dateOfBirth"], message: "Date of birth is required for rabbits born on the farm" })
+  }
+  if (!values.sire) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["sire"], message: "Select the sire for rabbits born on the farm" })
+  }
+  if (!values.dam) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dam"], message: "Select the dam for rabbits born on the farm" })
+  }
+
 })
 
 export type RabbitFormValues = z.infer<typeof rabbitFormSchema>

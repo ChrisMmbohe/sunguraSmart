@@ -22,6 +22,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { Tile } from "@/components/shared/tile"
+import { CHART_COLORS } from "@/components/dashboard/dashboard-charts"
 import type { HealthAnalyticsSummary } from "@/app/health/types"
 
 function toTitleCase(value: string) {
@@ -29,10 +31,10 @@ function toTitleCase(value: string) {
 }
 
 const OUTCOME_COLORS: Record<string, string> = {
-  ongoing: "#f59e0b",
-  recovered: "#10b981",
-  deceased: "#a3a3a3",
-  chronic: "#f97316",
+  ongoing: CHART_COLORS.warning,
+  recovered: CHART_COLORS.success,
+  deceased: CHART_COLORS.neutral,
+  chronic: CHART_COLORS.expense,
 }
 
 // Keyword lookup so each record type gets a distinct, semantically-relevant icon
@@ -77,39 +79,6 @@ function descriptionForType(type: string): string {
   return match ? match[1] : "Health records logged under this category."
 }
 
-function Tile({
-  icon: Icon,
-  label,
-  value,
-  tone,
-  description,
-}: {
-  icon: ElementType
-  label: string
-  value: string
-  tone: string
-  description: string
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Card className="gap-0 py-0 cursor-default bg-card shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300 border-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
-            <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone}`}>
-              <Icon className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent className="pb-4 pt-0">
-            <div className="text-2xl font-bold leading-tight">{value}</div>
-          </CardContent>
-        </Card>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-56 text-xs">{description}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 export function HealthSummaryStats({ analytics }: { analytics: HealthAnalyticsSummary }) {
   const typeChartData = analytics.byType
     .filter((t) => t.count > 0)
@@ -126,34 +95,54 @@ export function HealthSummaryStats({ analytics }: { analytics: HealthAnalyticsSu
   return (
     <TooltipProvider delayDuration={200}>
       <div className="grid gap-4">
+        {/* Mirrors the Schedule page's summary row: shared Tile component
+            (icon roundel + colored left accent bar) instead of the
+            Card+Tooltip cards this section used before. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Tile
             icon={Stethoscope}
             label="Currently sick"
             value={String(analytics.currentlySick)}
-            tone="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400"
-            description={`Active illness or injury cases still under treatment. ${analytics.currentlyRecovering} rabbit${analytics.currentlyRecovering === 1 ? " is" : "s are"} past treatment and recovering.`}
+            iconClassName="text-red-600"
+            valueClassName="text-red-600"
+            accentClassName="bg-red-500"
+            caption={
+              analytics.currentlyRecovering > 0
+                ? `${analytics.currentlyRecovering} recovering`
+                : undefined
+            }
           />
           <Tile
             icon={ShieldAlert}
             label="Quarantined"
             value={String(analytics.currentlyQuarantined)}
-            tone="bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400"
-            description="Rabbits currently isolated to prevent disease spreading through the herd."
+            iconClassName="text-orange-600"
+            valueClassName="text-orange-600"
+            accentClassName="bg-orange-500"
           />
           <Tile
             icon={AlertTriangle}
             label="Overdue follow-ups"
             value={String(analytics.overdueFollowUps)}
-            tone="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-            description={`Follow-up checks past their due date. ${analytics.dueThisWeekFollowUps} more ${analytics.dueThisWeekFollowUps === 1 ? "is" : "are"} due this week.`}
+            iconClassName="text-amber-600"
+            valueClassName="text-amber-600"
+            accentClassName="bg-amber-500"
+            caption={
+              analytics.overdueFollowUps === 0
+                ? "Nothing overdue"
+                : analytics.dueThisWeekFollowUps > 0
+                ? `${analytics.dueThisWeekFollowUps} more due this week`
+                : undefined
+            }
           />
           <Tile
             icon={Wallet}
             label="Vet cost this month"
             value={analytics.costThisMonth.toLocaleString()}
-            tone="bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400"
-            description={`Total treatment and medication spend logged across ${analytics.recordsThisMonth} record${analytics.recordsThisMonth === 1 ? "" : "s"} this month.`}
+            iconClassName="text-violet-600"
+            valueClassName="text-violet-600"
+            accentClassName="bg-violet-500"
+            caption={`${analytics.recordsThisMonth} record${analytics.recordsThisMonth === 1 ? "" : "s"}`}
           />
         </div>
 

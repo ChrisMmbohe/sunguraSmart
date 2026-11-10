@@ -1,39 +1,8 @@
 "use client"
 
-import * as React from "react"
 import { Home, DoorOpen, Boxes, PercentCircle } from "lucide-react"
 import type { CageSummary } from "@/app/cagecards/types"
-
-function Tile({
-  icon: Icon,
-  label,
-  value,
-  caption,
-  iconClassName,
-  valueClassName,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  caption?: string
-  iconClassName?: string
-  valueClassName?: string
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300 border-1">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
-        <Icon className={`h-5 w-5 ${iconClassName ?? "text-muted-foreground"}`} />
-      </div>
-      <div className="min-w-0">
-        <div className="text-lg font-semibold leading-tight tabular-nums">{value}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {label}
-          {caption ? ` · ${caption}` : ""}
-        </div>
-      </div>
-    </div>
-  )
-}
+import { Tile } from "@/components/shared/tile"
 
 export function CageCardsSummaryStats({ summary }: { summary: CageSummary }) {
   return (

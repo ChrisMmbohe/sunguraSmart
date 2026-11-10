@@ -18,6 +18,8 @@ export interface ISchedule extends Document, ITenantFields {
   recurrence: IScheduleRecurrence;
   completedDate?: Date;
   relatedHealthRecord?: Types.ObjectId | null;
+  relatedBreeding?: Types.ObjectId | null;
+  relatedBreedingMilestone?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -56,6 +58,8 @@ const ScheduleSchema = new Schema<ISchedule, IScheduleModel>(
     recurrence: { type: ScheduleRecurrenceSchema, default: () => ({ frequency: RecurrenceFrequency.NONE }) },
     completedDate: { type: Date },
     relatedHealthRecord: { type: Schema.Types.ObjectId, ref: 'HealthRecord', default: null },
+    relatedBreeding: { type: Schema.Types.ObjectId, ref: 'Breeding', default: null },
+    relatedBreedingMilestone: { type: String, trim: true },
     notes: { type: String, trim: true },
   },
   { timestamps: true }
@@ -65,6 +69,7 @@ ScheduleSchema.plugin(tenantPlugin);
 
 ScheduleSchema.index({ userId: 1, dueDate: 1, status: 1 });
 ScheduleSchema.index({ userId: 1, rabbit: 1 });
+ScheduleSchema.index({ userId: 1, relatedBreeding: 1, relatedBreedingMilestone: 1 });
 
 const RECURRENCE_DAYS: Record<RecurrenceFrequency, number | null> = {
   [RecurrenceFrequency.NONE]: null,

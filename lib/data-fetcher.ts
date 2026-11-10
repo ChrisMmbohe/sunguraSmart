@@ -7,6 +7,8 @@ import {
   Cage,
   Gender,
   RabbitStatus,
+  CageStatus,
+  CageType,
 } from "@/database"
 import type { RabbitTableData, RabbitFormOptions, SelectOption } from "@/app/rabbits/types"
 
@@ -70,9 +72,35 @@ export async function getRabbitFormOptions(): Promise<RabbitFormOptions> {
   const userId = await getAuthUserId()
   await dbConnect()
 
-  const [breeds, cages, bucks, does] = await Promise.all([
+  const cageLabels = Array.from({ length: 26 }, (_, row) =>
+    Array.from({ length: 12 }, (_, column) => `${String.fromCharCode(65 + row)}${column + 1}`)
+  ).flat()
+
+  await Cage.bulkWrite(
+    cageLabels.map((label) => ({
+      updateOne: {
+        filter: { userId, label },
+        update: {
+          $setOnInsert: {
+            userId,
+            label,
+            type: CageType.BREEDING,
+            status: CageStatus.EMPTY,
+            capacity: 1,
+          },
+        },
+        upsert: true,
+      },
+    }))
+  )
+
+  const [breeds, cages, occupiedCageIds, bucks, does] = await Promise.all([
     Breed.find({ userId }).sort({ name: 1 }).select("name").lean<any[]>(),
-    Cage.find({ userId }).sort({ label: 1 }).select("label status").lean<any[]>(),
+    Cage.find({ userId, label: { $in: cageLabels } })
+      .select("label")
+      .lean<any[]>(),
+    Rabbit.find({ userId, cage: { $ne: null } })
+      .distinct("cage"),
     Rabbit.find({ userId, gender: Gender.MALE, status: RabbitStatus.ACTIVE })
       .select("name tagNumber")
       .sort({ tagNumber: 1 })
@@ -90,10 +118,10 @@ export async function getRabbitFormOptions(): Promise<RabbitFormOptions> {
 
   return {
     breeds: breeds.map((b) => ({ value: String(b._id), label: b.name })),
-    cages: cages.map((c) => ({
-      value: String(c._id),
-      label: c.status === "occupied" ? `${c.label} (occupied)` : c.label,
-    })),
+    cages: cages
+      .filter((c) => !occupiedCageIds.some((id) => String(id) === String(c._id)))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+      .map((c) => ({ value: String(c._id), label: c.label })),
     bucks: bucks.map(toOption),
     does: does.map(toOption),
   }

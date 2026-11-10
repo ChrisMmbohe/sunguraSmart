@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useTransition } from "react"
+import { Plus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Gender, RabbitStatus, HealthStatus, AcquisitionType, RabbitPurpose } from "@/types/enums"
 import { rabbitFormSchema, type RabbitFormValues, type RabbitFormOptions, type RabbitTableData } from "@/app/rabbits/types"
-import { createRabbit, updateRabbit } from "@/app/rabbits/actions"
+import { createBreed, createRabbit, updateRabbit } from "@/app/rabbits/actions"
 
 const NONE = "__none__"
 
@@ -69,16 +70,62 @@ export function RabbitFormDialog({
   const [fieldErrors, setFieldErrors] = React.useState<Partial<Record<keyof RabbitFormValues, string>>>({})
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [breedDialogOpen, setBreedDialogOpen] = React.useState(false)
+  const [newBreedName, setNewBreedName] = React.useState("")
+  const [newBreedDescription, setNewBreedDescription] = React.useState("")
+  const [newBreedWeight, setNewBreedWeight] = React.useState("")
+  const [newBreedLitterSize, setNewBreedLitterSize] = React.useState("")
+  const [newBreedGestationDays, setNewBreedGestationDays] = React.useState("31")
+  const [newBreedMaturityAgeDays, setNewBreedMaturityAgeDays] = React.useState("150")
+  const [newBreedWeaningAgeDays, setNewBreedWeaningAgeDays] = React.useState("42")
+  const [breedError, setBreedError] = React.useState<string | null>(null)
+  const [breedOptions, setBreedOptions] = React.useState(options.breeds)
+  const [purchaseAgeMonths, setPurchaseAgeMonths] = React.useState("")
 
   // Reset the form whenever a different rabbit is opened for editing, or
   // the dialog is opened fresh for "Add rabbit".
   React.useEffect(() => {
+    setBreedOptions(options.breeds)
     if (open) {
       setValues(toFormValues(rabbit))
+      setPurchaseAgeMonths(rabbit?.ageDays != null ? String(Math.floor(rabbit.ageDays / 30.4375)) : "")
       setFieldErrors({})
       setFormError(null)
     }
-  }, [open, rabbit])
+  }, [open, rabbit, options.breeds])
+
+  function handleCreateBreed(e: React.FormEvent) {
+    e.preventDefault()
+    setBreedError(null)
+
+    startTransition(async () => {
+      const result = await createBreed({
+        name: newBreedName,
+        description: newBreedDescription,
+        averageAdultWeightKg: newBreedWeight ? Number(newBreedWeight) : undefined,
+        averageLitterSize: newBreedLitterSize ? Number(newBreedLitterSize) : undefined,
+        gestationDays: Number(newBreedGestationDays),
+        maturityAgeDays: Number(newBreedMaturityAgeDays),
+        weaningAgeDays: Number(newBreedWeaningAgeDays),
+      })
+      if (!result.success || !result.data) {
+        setBreedError(result.error ?? "Could not add the breed.")
+        return
+      }
+
+      const option = { value: result.data.id, label: result.data.name }
+      setBreedOptions((current) => [...current.filter((breed) => breed.value !== option.value), option])
+      set("breed", option.value)
+      setNewBreedName("")
+      setNewBreedDescription("")
+      setNewBreedWeight("")
+      setNewBreedLitterSize("")
+      setNewBreedGestationDays("31")
+      setNewBreedMaturityAgeDays("150")
+      setNewBreedWeaningAgeDays("42")
+      setBreedDialogOpen(false)
+    })
+  }
 
   function set<K extends keyof RabbitFormValues>(key: K, value: RabbitFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }))
@@ -86,7 +133,17 @@ export function RabbitFormDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const parsed = rabbitFormSchema.safeParse(values)
+    const valuesForSubmit = {
+      ...values,
+      acquisitionCost: values.acquisitionType === AcquisitionType.PURCHASED ? values.acquisitionCost : undefined,
+      ...(values.acquisitionType === AcquisitionType.PURCHASED && purchaseAgeMonths ? { dateOfBirth: (() => {
+          const birthDate = new Date()
+          birthDate.setHours(12, 0, 0, 0)
+          birthDate.setMonth(birthDate.getMonth() - Number(purchaseAgeMonths))
+          return birthDate.toISOString().slice(0, 10)
+        })() } : {}),
+    }
+    const parsed = rabbitFormSchema.safeParse(valuesForSubmit)
     if (!parsed.success) {
       const errors: Partial<Record<keyof RabbitFormValues, string>> = {}
       for (const issue of parsed.error.issues) {
@@ -117,6 +174,9 @@ export function RabbitFormDialog({
 
   const bucksExcludingSelf = options.bucks.filter((b) => b.value !== rabbit?.id)
   const doesExcludingSelf = options.does.filter((d) => d.value !== rabbit?.id)
+  const cageOptions = rabbit?.cageId && rabbit.cageLabel && !options.cages.some((c) => c.value === rabbit.cageId)
+    ? [{ value: rabbit.cageId, label: rabbit.cageLabel }, ...options.cages]
+    : options.cages
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -154,11 +214,26 @@ export function RabbitFormDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Breed *</Label>
+              <div className="flex h-7 items-center justify-between">
+                <Label>Breed *</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setBreedError(null)
+                    setBreedDialogOpen(true)
+                  }}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add breed
+                </Button>
+              </div>
               <Select value={values.breed} onValueChange={(v: string) => set("breed", v)}>
                 <SelectTrigger><SelectValue placeholder="Select breed" /></SelectTrigger>
                 <SelectContent>
-                  {options.breeds.map((b) => (
+                  {breedOptions.map((b) => (
                     <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -166,7 +241,9 @@ export function RabbitFormDialog({
               {fieldErrors.breed && <p className="text-xs text-destructive">{fieldErrors.breed}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Gender *</Label>
+              <div className="flex h-7 items-center">
+                <Label>Gender *</Label>
+              </div>
               <Select value={values.gender} onValueChange={(v: string) => set("gender", v as Gender)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -177,16 +254,157 @@ export function RabbitFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="dob">Date of birth</Label>
-              <Input
-                id="dob"
-                type="date"
-                value={values.dateOfBirth}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("dateOfBirth", e.target.value)}
-              />
+          <section className="space-y-4 rounded-lg border border-border/70 bg-muted/20 p-4">
+            <div>
+              <h3 className="text-sm font-semibold">Acquisition details</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Tell us how this rabbit joined your farm.</p>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Acquisition *</Label>
+                <Select value={values.acquisitionType} onValueChange={(v: string) => set("acquisitionType", v as AcquisitionType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.values(AcquisitionType).map((a) => (
+                      <SelectItem key={a} value={a} className="capitalize">{a.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {values.acquisitionType !== AcquisitionType.BORN_ON_FARM && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="acqDate">Acquisition date *</Label>
+                  <Input
+                    id="acqDate"
+                    type="date"
+                    value={values.acquisitionDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("acquisitionDate", e.target.value)}
+                  />
+                  {fieldErrors.acquisitionDate && <p className="text-xs text-destructive">{fieldErrors.acquisitionDate}</p>}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="dob">
+                  {values.acquisitionType === AcquisitionType.PURCHASED ? "Age (months)" : `Date of birth${values.acquisitionType === AcquisitionType.BORN_ON_FARM ? " *" : ""}`}
+                </Label>
+                <Input
+                  id="dob"
+                  type={values.acquisitionType === AcquisitionType.PURCHASED ? "number" : "date"}
+                  min={values.acquisitionType === AcquisitionType.PURCHASED ? 0 : undefined}
+                  step={values.acquisitionType === AcquisitionType.PURCHASED ? 1 : undefined}
+                  value={values.acquisitionType === AcquisitionType.PURCHASED ? purchaseAgeMonths : values.dateOfBirth}
+                  disabled={values.acquisitionType !== AcquisitionType.BORN_ON_FARM && values.acquisitionType !== AcquisitionType.PURCHASED}
+                  required={values.acquisitionType === AcquisitionType.BORN_ON_FARM}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => values.acquisitionType === AcquisitionType.PURCHASED
+                    ? setPurchaseAgeMonths(e.target.value)
+                    : set("dateOfBirth", e.target.value)}
+                />
+                {fieldErrors.dateOfBirth && values.acquisitionType !== AcquisitionType.PURCHASED && <p className="text-xs text-destructive">{fieldErrors.dateOfBirth}</p>}
+              </div>
+              {values.acquisitionType === AcquisitionType.PURCHASED && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="acqCost">Cost (KES) *</Label>
+                  <Input
+                    id="acqCost"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={values.acquisitionCost ?? ""}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("acquisitionCost", e.target.value ? Number(e.target.value) : undefined)}
+                  />
+                  {fieldErrors.acquisitionCost && <p className="text-xs text-destructive">{fieldErrors.acquisitionCost}</p>}
+                </div>
+              )}
+            </div>
+
+            {values.acquisitionType === AcquisitionType.BORN_ON_FARM && (
+              <div className="space-y-3 border-t border-border/60 pt-4">
+                <div>
+                  <p className="text-sm font-medium">Parentage</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Link this rabbit to its parents for breeding records.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Sire (father) *</Label>
+                    <Select value={values.sire} onValueChange={(v: string) => set("sire", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select sire" /></SelectTrigger>
+                      <SelectContent>
+                        {bucksExcludingSelf.map((b) => (
+                          <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Dam (mother) *</Label>
+                    <Select value={values.dam} onValueChange={(v: string) => set("dam", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select dam" /></SelectTrigger>
+                      <SelectContent>
+                        {doesExcludingSelf.map((d) => (
+                          <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {values.acquisitionType !== AcquisitionType.BORN_ON_FARM && (
+              <div className="space-y-1.5 border-t border-border/60 pt-4">
+                <Label htmlFor="sourceFarm">Source farm</Label>
+                <Input
+                  id="sourceFarm"
+                  value={values.sourceFarm}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("sourceFarm", e.target.value)}
+                  placeholder="Where this rabbit came from"
+                />
+              </div>
+            )}
+          </section>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Purpose *</Label>
+              <Select value={values.purpose} onValueChange={(v: string) => set("purpose", v as RabbitPurpose)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.values(RabbitPurpose).map((p) => (
+                    <SelectItem key={p} value={p} className="capitalize">{p.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cage</Label>
+              <Select value={values.cage || NONE} onValueChange={(v: string) => set("cage", v === NONE ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Unassigned</SelectItem>
+                  {cageOptions.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="color">Color</Label>
+              <Input id="color" value={values.color} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("color", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="markings">Markings</Label>
+              <Input id="markings" value={values.markings} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("markings", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Status *</Label>
               <Select value={values.status} onValueChange={(v: string) => set("status", v as RabbitStatus)}>
@@ -211,123 +429,12 @@ export function RabbitFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Sire (father)</Label>
-              <Select value={values.sire || NONE} onValueChange={(v: string) => set("sire", v === NONE ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Unknown" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Unknown</SelectItem>
-                  {bucksExcludingSelf.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Dam (mother)</Label>
-              <Select value={values.dam || NONE} onValueChange={(v: string) => set("dam", v === NONE ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Unknown" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Unknown</SelectItem>
-                  {doesExcludingSelf.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label>Acquisition *</Label>
-              <Select value={values.acquisitionType} onValueChange={(v: string) => set("acquisitionType", v as AcquisitionType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.values(AcquisitionType).map((a) => (
-                    <SelectItem key={a} value={a} className="capitalize">{a.replace(/_/g, " ")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="acqDate">Acquisition date *</Label>
-              <Input
-                id="acqDate"
-                type="date"
-                value={values.acquisitionDate}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("acquisitionDate", e.target.value)}
-              />
-              {fieldErrors.acquisitionDate && <p className="text-xs text-destructive">{fieldErrors.acquisitionDate}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="acqCost">Cost (KES)</Label>
-              <Input
-                id="acqCost"
-                type="number"
-                min={0}
-                step="0.01"
-                value={values.acquisitionCost ?? ""}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("acquisitionCost", e.target.value ? Number(e.target.value) : undefined)}
-              />
-            </div>
-          </div>
-
-          {values.acquisitionType !== AcquisitionType.BORN_ON_FARM && (
-            <div className="space-y-1.5">
-              <Label htmlFor="sourceFarm">Source farm</Label>
-              <Input
-                id="sourceFarm"
-                value={values.sourceFarm}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("sourceFarm", e.target.value)}
-                placeholder="Where this rabbit came from"
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Purpose *</Label>
-              <Select value={values.purpose} onValueChange={(v: string) => set("purpose", v as RabbitPurpose)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.values(RabbitPurpose).map((p) => (
-                    <SelectItem key={p} value={p} className="capitalize">{p.replace(/_/g, " ")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Cage</Label>
-              <Select value={values.cage || NONE} onValueChange={(v: string) => set("cage", v === NONE ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Unassigned</SelectItem>
-                  {options.cages.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="color">Color</Label>
-              <Input id="color" value={values.color} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("color", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="markings">Markings</Label>
-              <Input id="markings" value={values.markings} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("markings", e.target.value)} />
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
               value={values.notes}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("notes", e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set("notes", e.target.value)}
               rows={3}
             />
           </div>
@@ -342,6 +449,105 @@ export function RabbitFormDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <Dialog open={breedDialogOpen} onOpenChange={setBreedDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add breed</DialogTitle>
+            <DialogDescription>Add a breed to your farm&apos;s breed list.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateBreed} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-breed-name">Breed name</Label>
+              <Input
+                id="new-breed-name"
+                value={newBreedName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedName(e.target.value)}
+                placeholder="e.g. New Zealand White"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-breed-description">Description</Label>
+              <Textarea
+                id="new-breed-description"
+                value={newBreedDescription}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewBreedDescription(e.target.value)}
+                placeholder="Optional notes about this breed"
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-breed-weight">Average adult weight (kg)</Label>
+                <Input
+                  id="new-breed-weight"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={newBreedWeight}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedWeight(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-breed-litter-size">Average litter size</Label>
+                <Input
+                  id="new-breed-litter-size"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={newBreedLitterSize}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedLitterSize(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-breed-gestation">Gestation (days)</Label>
+                <Input
+                  id="new-breed-gestation"
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={newBreedGestationDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedGestationDays(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-breed-maturity">Maturity age (days)</Label>
+                <Input
+                  id="new-breed-maturity"
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={newBreedMaturityAgeDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedMaturityAgeDays(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-breed-weaning">Weaning age (days)</Label>
+                <Input
+                  id="new-breed-weaning"
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={newBreedWeaningAgeDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewBreedWeaningAgeDays(e.target.value)}
+                />
+              </div>
+            </div>
+            {breedError && <p className="text-xs text-destructive">{breedError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setBreedDialogOpen(false)} disabled={isPending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Adding…" : "Add breed"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

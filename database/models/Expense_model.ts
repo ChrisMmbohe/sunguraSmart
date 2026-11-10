@@ -13,6 +13,7 @@ export interface IExpense extends Document, ITenantFields {
   date: Date;
   relatedRabbit?: Types.ObjectId | null;
   relatedFeedType?: Types.ObjectId | null;
+  rabbitAcquisition?: boolean;
   vendor?: string;
   notes?: string;
   createdAt: Date;
@@ -43,6 +44,7 @@ const ExpenseSchema = new Schema<IExpense, IExpenseModel>(
     date: { type: Date, required: true, default: Date.now },
     relatedRabbit: { type: Schema.Types.ObjectId, ref: 'Rabbit', default: null },
     relatedFeedType: { type: Schema.Types.ObjectId, ref: 'FeedType', default: null },
+    rabbitAcquisition: { type: Boolean, default: false },
     vendor: { type: String, trim: true },
     notes: { type: String, trim: true },
   },

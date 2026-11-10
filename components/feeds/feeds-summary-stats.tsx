@@ -1,6 +1,6 @@
 "use client"
 
-import { Package, AlertTriangle, Wallet, ClipboardList, Gauge } from "lucide-react"
+import { Package, AlertTriangle, Wallet, Gauge } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -13,8 +13,9 @@ import {
   YAxis,
 } from "recharts"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { StatCard } from "@/components/dashboard/stat-card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tile } from "@/components/shared/tile"
+import { CHART_COLORS } from "@/components/dashboard/dashboard-charts"
 import { useCurrency } from "@/components/providers/currency-provider"
 import type { FeedAnalyticsSummary } from "@/app/feeds/types"
 
@@ -23,12 +24,9 @@ function toTitleCase(value: string) {
 }
 
 /**
- * "Pellets g / Rabbit / Day" is the exact same metric as the dashboard's
- * own "Feed Efficiency" card (Gauge icon, amber) — same icon, same color,
- * same "30-day avg" caption. "Stock Value" reuses emerald, matching
- * "Revenue". "Low Stock" reuses amber, matching the warning tone used
- * across the dashboard. "Feed Types" / "Logs This Month" stay uncolored,
- * matching the dashboard's neutral-count style.
+ * Keep the summary focused on the four metrics that matter most for day-to-day
+ * feed operations: catalogue breadth, low-stock risk, inventory value, and
+ * current efficiency. The rest of the detailed charts remain below.
  */
 export function FeedsSummaryStats({ analytics }: { analytics: FeedAnalyticsSummary }) {
   const { format } = useCurrency()
@@ -40,56 +38,65 @@ export function FeedsSummaryStats({ analytics }: { analytics: FeedAnalyticsSumma
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Feed Types" value={String(analytics.totalFeedTypes)} icon={Package} />
-        <StatCard
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Tile
+          icon={Package}
+          label="Feed Types"
+          value={String(analytics.totalFeedTypes)}
+          accentClassName="bg-sky-500"
+        />
+        <Tile
+          icon={AlertTriangle}
           label="Low Stock"
           value={String(analytics.lowStockCount)}
-          icon={AlertTriangle}
           iconClassName="text-amber-600"
           valueClassName="text-amber-600"
+          accentClassName="bg-amber-500"
         />
-        <StatCard
+        <Tile
+          icon={Wallet}
           label="Stock Value"
           value={format(analytics.totalStockValue)}
-          icon={Wallet}
           iconClassName="text-emerald-600"
           valueClassName="text-emerald-600"
+          accentClassName="bg-emerald-500"
         />
-        <StatCard label="Logs This Month" value={String(analytics.logsThisMonth)} icon={ClipboardList} />
-        <StatCard
+        <Tile
+          icon={Gauge}
           label="Pellets g / Rabbit / Day"
           value={String(analytics.feedEfficiency.pelletsGramsPerRabbitPerDay)}
-          icon={Gauge}
           iconClassName="text-amber-600"
           valueClassName="text-amber-600"
+          accentClassName="bg-amber-500"
           caption="30-day avg"
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="h-full">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Pellet consumption (last 6 months, kg)</CardTitle>
+            <CardTitle className="text-sm font-medium">Pellet consumption</CardTitle>
+            <CardDescription className="text-xs">Last 6 months, monthly kilograms</CardDescription>
           </CardHeader>
-          <CardContent className="h-64 pl-0">
+          <CardContent className="h-64 px-0 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics.pelletsConsumptionTrend} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} width={40} />
                 <Tooltip formatter={(value) => `${value} kg`} />
-                <Line type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="value" stroke={CHART_COLORS.expense} strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="h-full">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Feed spend (last 6 months)</CardTitle>
+            <CardTitle className="text-sm font-medium">Feed spend</CardTitle>
+            <CardDescription className="text-xs">Last 6 months, rolling monthly spend</CardDescription>
           </CardHeader>
-          <CardContent className="h-64 pl-0">
+          <CardContent className="h-64 px-0 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics.feedSpendTrend} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -100,7 +107,7 @@ export function FeedsSummaryStats({ analytics }: { analytics: FeedAnalyticsSumma
                   width={48}
                 />
                 <Tooltip formatter={(value) => format(Number(value ?? 0))} />
-                <Bar dataKey="value" fill="#059669" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" fill={CHART_COLORS.revenue} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -110,16 +117,17 @@ export function FeedsSummaryStats({ analytics }: { analytics: FeedAnalyticsSumma
       {categoryChartData.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Consumption by category (last 90 days)</CardTitle>
+            <CardTitle className="text-sm font-medium">Consumption by category</CardTitle>
+            <CardDescription className="text-xs">Last 90 days, totals by feed category</CardDescription>
           </CardHeader>
-          <CardContent className="h-64 pl-0">
+          <CardContent className="h-64 px-0 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={categoryChartData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} className="stroke-muted" />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="label" tick={{ fontSize: 12 }} width={140} />
                 <Tooltip />
-                <Bar dataKey="total" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="total" fill={CHART_COLORS.category} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

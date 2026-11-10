@@ -7,6 +7,7 @@ import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YA
 // used on the Rabbits page / Dashboard). Adjust the path below if it's
 // actually nested under "@/components/dashboard/tile" in the project.
 import { Tile } from "@/components/shared/tile"
+import { CHART_COLORS } from "@/components/dashboard/dashboard-charts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import type { ScheduleAnalyticsSummary } from "@/app/schedule/types"
 
@@ -21,10 +22,10 @@ function toTitleCase(value: string) {
 //   there's no signal to color by: neutral slate.
 // - otherwise, rate is completed / (completed + missed).
 function healthColor(rate: number | null): string {
-  if (rate === null) return "#94a3b8" // slate-400 - no resolved history yet
-  if (rate >= 0.8) return "var(--chart-2)" // theme's existing "good" chart token
-  if (rate >= 0.5) return "#f59e0b" // amber-500
-  return "#ef4444" // red-500
+  if (rate === null) return CHART_COLORS.neutral
+  if (rate >= 0.8) return CHART_COLORS.success
+  if (rate >= 0.5) return CHART_COLORS.warning
+  return CHART_COLORS.expense
 }
 
 type ByTypeRow = ScheduleAnalyticsSummary["byType"][number]

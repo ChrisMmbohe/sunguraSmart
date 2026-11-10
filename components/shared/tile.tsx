@@ -34,7 +34,7 @@ export function Tile({
   accentClassName,
 }: TileProps) {
   return (
-    <div className="relative flex items-start gap-3 overflow-hidden rounded-lg border bg-card px-4 py-3 shadow-2xl dark:shadow-muted hover:shadow-lg transition-shadow duration-300 border-1">
+    <div className="relative flex items-start gap-3 overflow-hidden rounded-lg border bg-card px-4 py-3 shadow-md dark:shadow-muted hover:shadow-lg transition-shadow duration-300 border-1">
       {accentClassName ? (
         <span className={cn("absolute inset-y-0 left-0 w-1", accentClassName)} aria-hidden />
       ) : null}

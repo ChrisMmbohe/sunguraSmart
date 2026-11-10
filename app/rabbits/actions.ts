@@ -2,14 +2,36 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { dbConnect, Rabbit, WeightLog, Litter, HealthRecord, Cage, RabbitStatus, CageStatus } from "@/database"
 import {
+  dbConnect,
+  Rabbit,
+  Breed,
+  WeightLog,
+  Litter,
+  HealthRecord,
+  Cage,
+  Expense,
+  RabbitStatus,
+  CageStatus,
+  AcquisitionType,
+  ExpenseCategory,
+  PaymentMethod,
+} from "@/database"
+import {
+  breedFormSchema,
   rabbitFormSchema,
   weightLogFormSchema,
   type RabbitFormValues,
+  type BreedFormValues,
   type WeightLogFormValues,
   type RabbitAnalytics,
 } from "./types"
+
+export interface BreedActionResult {
+  success: boolean
+  data?: { id: string; name: string }
+  error?: string
+}
 
 export interface ActionResult {
   success: boolean
@@ -21,6 +43,28 @@ async function getAuthUserId(): Promise<string> {
   const { userId } = await auth()
   if (!userId) throw new Error("You must be signed in.")
   return userId
+}
+
+export async function createBreed(values: BreedFormValues): Promise<BreedActionResult> {
+  const parsed = breedFormSchema.safeParse(values)
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Enter a valid breed name." }
+  }
+
+  try {
+    const userId = await getAuthUserId()
+    await dbConnect()
+
+    const breed = await Breed.create({ userId, ...parsed.data })
+    revalidatePath("/rabbits")
+
+    return { success: true, data: { id: String(breed._id), name: breed.name } }
+  } catch (err) {
+    if (err && typeof err === "object" && (err as { code?: number }).code === 11000) {
+      return { success: false, error: "A breed with this name already exists on your farm." }
+    }
+    return { success: false, error: "Could not add the breed. Please try again." }
+  }
 }
 
 /** Turns a Mongoose duplicate-key / validation error into a friendly message. */
@@ -58,6 +102,34 @@ function toDoc(values: RabbitFormValues) {
   }
 }
 
+async function syncRabbitPurchaseExpense(userId: string, rabbitId: string, values: RabbitFormValues) {
+  const expense = await Expense.findOne({ userId, relatedRabbit: rabbitId, rabbitAcquisition: true })
+  const shouldExist = values.acquisitionType === AcquisitionType.PURCHASED && values.acquisitionCost !== undefined
+
+  if (!shouldExist) {
+    if (expense) await expense.deleteOne()
+    return
+  }
+
+  const expenseDoc = {
+    category: ExpenseCategory.BREEDING_STOCK,
+    description: `Purchase of rabbit ${values.tagNumber}`,
+    amount: values.acquisitionCost,
+    paymentMethod: PaymentMethod.CASH,
+    date: new Date(values.acquisitionDate),
+    relatedRabbit: rabbitId,
+    rabbitAcquisition: true,
+    vendor: values.sourceFarm || undefined,
+  }
+
+  if (expense) {
+    Object.assign(expense, expenseDoc)
+    await expense.save()
+  } else {
+    await Expense.create({ ...expenseDoc, userId })
+  }
+}
+
 export async function createRabbit(values: RabbitFormValues): Promise<ActionResult> {
   const parsed = rabbitFormSchema.safeParse(values)
   if (!parsed.success) {
@@ -69,9 +141,19 @@ export async function createRabbit(values: RabbitFormValues): Promise<ActionResu
     await dbConnect()
 
     const rabbit = new Rabbit({ ...toDoc(parsed.data), userId })
+    if (parsed.data.cage) {
+      const cageInUse = await Rabbit.exists({
+        userId,
+        cage: parsed.data.cage,
+      })
+      if (cageInUse) return { success: false, error: "That cage is already assigned to an active rabbit." }
+    }
     await rabbit.save()
+    await syncRabbitPurchaseExpense(userId, String(rabbit._id), parsed.data)
 
     revalidatePath("/rabbits")
+    revalidatePath("/finances")
+    revalidatePath("/dashboard")
     return { success: true }
   } catch (err) {
     return { success: false, error: describeError(err) }
@@ -93,10 +175,22 @@ export async function updateRabbit(id: string, values: RabbitFormValues): Promis
       return { success: false, error: "Rabbit not found on your farm." }
     }
 
+    if (parsed.data.cage && String(rabbit.cage ?? "") !== parsed.data.cage) {
+      const cageInUse = await Rabbit.exists({
+        userId,
+        cage: parsed.data.cage,
+        _id: { $ne: rabbit._id },
+      })
+      if (cageInUse) return { success: false, error: "That cage is already assigned to an active rabbit." }
+    }
+
     Object.assign(rabbit, toDoc(parsed.data))
     await rabbit.save()
+    await syncRabbitPurchaseExpense(userId, String(rabbit._id), parsed.data)
 
     revalidatePath("/rabbits")
+    revalidatePath("/finances")
+    revalidatePath("/dashboard")
     return { success: true }
   } catch (err) {
     return { success: false, error: describeError(err) }
@@ -124,9 +218,12 @@ export async function deleteRabbit(id: string): Promise<ActionResult> {
       )
     }
 
+    await Expense.deleteOne({ userId, relatedRabbit: rabbit._id, rabbitAcquisition: true })
     await Rabbit.deleteOne({ _id: id, userId })
 
     revalidatePath("/rabbits")
+    revalidatePath("/finances")
+    revalidatePath("/dashboard")
     return { success: true }
   } catch (err) {
     return { success: false, error: describeError(err) }

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SiteHeader } from '@/components/site-header';
@@ -76,6 +77,8 @@ const kes = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES',
 export default async function Page() {
   const { userId } = await auth();
   const snapshot = userId ? await getHomeSnapshot(userId) : null;
+
+  if (userId && !snapshot) redirect('/dashboard');
 
   return (
     <SidebarProvider

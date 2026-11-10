@@ -19,7 +19,7 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import {ThemeLogo} from "@/components/ui/themelogo";
-import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { ClerkLoaded, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import {Button} from "@/components/ui/button";
 import Link from "next/link"
 import { Separator } from "./ui/separator"
@@ -37,6 +37,12 @@ const data = {
             title: "Rabbits",
             url: "/rabbits",
             emoji: "🐰",
+
+        },
+        {
+            title: "Breeding",
+            url: "/breeding",
+            emoji: "💕",
 
         },
         {
@@ -131,23 +137,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <NavSecondary items={data.navSecondary} className="mt-auto" />
             </SidebarContent>
             <SidebarFooter>
-                <SignedIn>
-                    <NavUser />
-                </SignedIn>
-                <SignedOut>
-                    <SidebarMenu>
-                        <SidebarMenuItem>
-                            <div className="flex w-full">
-                                <SignInButton mode="modal">
-                                    <Button className="w-full" >
-                                        <LogIn className="h-4 w-4" />
-                                        <span className="group-data-[collapsible=icon]:hidden">Sign In / Sign Up</span>
-                                    </Button>
-                                </SignInButton>
-                            </div>
-                        </SidebarMenuItem>
-                    </SidebarMenu>
-                </SignedOut>
+                <ClerkLoaded>
+                    <SignedIn>
+                        <NavUser />
+                    </SignedIn>
+                    <SignedOut>
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <div className="flex w-full">
+                                    <SignInButton mode="modal" fallbackRedirectUrl="/">
+                                        <Button className="w-full" >
+                                            <LogIn className="h-4 w-4" />
+                                            <span className="group-data-[collapsible=icon]:hidden">Sign In / Sign Up</span>
+                                        </Button>
+                                    </SignInButton>
+                                </div>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SignedOut>
+                </ClerkLoaded>
             </SidebarFooter>
         </Sidebar>
     )

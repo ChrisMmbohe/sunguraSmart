@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter";
 import { DataTableViewOptions } from "@/components/ui/data-table-view-options";
-import { LitterFormDialog } from "@/components/litters/litter-form-dialog";
 import type { LitterTableData, BreedingOption } from "./types";
 
 interface LittersDataTableToolbarProps {
@@ -92,7 +91,6 @@ export function LittersDataTableToolbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <LitterFormDialog mode="create" breedingOptions={breedingOptions} />
         <DataTableViewOptions table={table} />
       </div>
     </div>
