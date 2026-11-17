@@ -1,6 +1,31 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
-export default clerkMiddleware();
+const protectedRoutes = [
+  '/dashboard',
+  '/rabbits',
+  '/litters',
+  '/schedule',
+  '/feeds',
+  '/health',
+  '/finances',
+  '/cagecards',
+  '/reports',
+];
+
+export default clerkMiddleware(async (auth, request) => {
+  const pathname = request.nextUrl.pathname;
+  const isProtectedRoute = protectedRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+
+  if (!isProtectedRoute) return;
+
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.redirect(new URL('/?loginRequired=1', request.url));
+  }
+});
 
 export const config = {
   matcher: [

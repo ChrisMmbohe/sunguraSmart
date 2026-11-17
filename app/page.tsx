@@ -74,7 +74,12 @@ const kes = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES',
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ loginRequired?: string }>;
+}) {
+  const { loginRequired } = await searchParams;
   const { userId } = await auth();
   const snapshot = userId ? await getHomeSnapshot(userId) : null;
 
@@ -92,7 +97,11 @@ export default async function Page() {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader />
-        {snapshot ? <SignedInHome snapshot={snapshot} /> : <MarketingHome />}
+        {snapshot ? (
+          <SignedInHome snapshot={snapshot} />
+        ) : (
+          <MarketingHome loginRequired={loginRequired === '1'} />
+        )}
       </SidebarInset>
     </SidebarProvider>
   );
@@ -327,9 +336,17 @@ const MODULES = [
   },
 ];
 
-function MarketingHome() {
+function MarketingHome({ loginRequired }: { loginRequired: boolean }) {
   return (
     <div className="flex flex-1 flex-col bg-background text-foreground">
+      {loginRequired && (
+        <div
+          role="alert"
+          className="border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-center text-sm text-foreground"
+        >
+          You must log in to access that page. Please sign in or create an account to continue.
+        </div>
+      )}
       {/* Announcement strip — fills the header-to-hero gap with something real
           instead of empty top margin */}
       <div className="border-b border-border bg-secondary px-4 py-2.5 text-center text-secondary-foreground">
